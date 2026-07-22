@@ -1,0 +1,9 @@
+# Template para preencher manualmente
+# Abra https://supabase.com/dashboard/project/tqcolebxoedqheykxcvn/settings/api-keys
+# Copie os valores completos abaixo:
+
+NEXT_PUBLIC_SUPABASE_URL=https://tqcolebxoedqheykxcvn.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+
+# Não preencha aqui. Salve seu .env.local manualmente após obter as chaves.
