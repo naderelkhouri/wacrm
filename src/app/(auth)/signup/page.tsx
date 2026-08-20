@@ -68,25 +68,44 @@ function SignupPageInner() {
       ? `${window.location.origin}/join/${encodeURIComponent(inviteToken)}`
       : undefined;
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+          ...(emailRedirectTo ? { emailRedirectTo } : {}),
         },
-        ...(emailRedirectTo ? { emailRedirectTo } : {}),
-      },
-    });
+      });
 
-    if (error) {
-      setError(error.message);
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+        return;
+      }
+
+      // If auto-confirmed (session issued immediately), redirect straight to app
+      if (data?.session) {
+        const destination = inviteToken
+          ? `/join/${encodeURIComponent(inviteToken)}`
+          : "/dashboard";
+        window.location.href = destination;
+        return;
+      }
+
+      setSuccess(true);
+    } catch (err: unknown) {
+      console.error("[Signup error]:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to create account. Please try again."
+      );
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setSuccess(true);
-    setLoading(false);
   };
 
   if (success) {

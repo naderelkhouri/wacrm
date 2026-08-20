@@ -1,0 +1,40 @@
+{
+  "name": "WA-CRM — WhatsApp CRM & Agency AI",
+  "short_name": "WA-CRM",
+  "description": "CRM para WhatsApp oficial com Agentes Especialistas da The Agency",
+  "start_url": "/inbox",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#7c3aed",
+  "icons": [
+    {
+      "src": "/app-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Inbox WhatsApp",
+      "url": "/inbox",
+      "description": "Atendimento e conversas do WhatsApp"
+    },
+    {
+      "name": "Pipelines de Vendas",
+      "url": "/pipelines",
+      "description": "Funil de vendas e negócios Kanban"
+    },
+    {
+      "name": "Agentes da Agency",
+      "url": "/agents",
+      "description": "Configuração e testes dos Agentes de IA"
+    }
+  ]
+}

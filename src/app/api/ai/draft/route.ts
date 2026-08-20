@@ -36,6 +36,8 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null)
     const conversationId =
       body && typeof body.conversation_id === 'string' ? body.conversation_id : ''
+    const agencyAgent =
+      body && typeof body.agency_agent === 'string' ? body.agency_agent : null
     if (!conversationId) {
       return NextResponse.json(
         { error: 'conversation_id is required' },
@@ -102,6 +104,7 @@ export async function POST(request: Request) {
       userPrompt: config.systemPrompt,
       mode: 'draft',
       knowledge,
+      agencySpecialist: agencyAgent,
     })
 
     const { text, usage } = await generateReply({ config, systemPrompt, messages })
@@ -126,7 +129,7 @@ export async function POST(request: Request) {
       console.error('[ai/draft] usage log skipped:', logErr)
     }
 
-    return NextResponse.json({ draft: text })
+    return NextResponse.json({ draft: text, agency_agent: agencyAgent })
   } catch (err) {
     if (err instanceof AiError) {
       return NextResponse.json(

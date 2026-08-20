@@ -55,6 +55,10 @@ import {
 import { validateInteractivePayload } from "@/lib/whatsapp/interactive";
 import type { InteractiveMessagePayload, QuickReply } from "@/types";
 import { QuickReplyPicker } from "./quick-reply-picker";
+import {
+  ALL_AGENCY_SPECIALISTS,
+  getAgencySpecialist,
+} from "@/lib/ai/agency-specialists";
 
 /** Media content types an agent can send from the composer. */
 export type ComposerMediaKind = "image" | "video" | "document" | "audio";
@@ -255,48 +259,57 @@ export function MessageComposer({
   );
 
   // Ask the AI assistant for a suggested reply and drop it into the
-  // composer for the agent to edit + send. Read-only server-side —
-  // nothing is sent until the agent hits Send.
-  const handleDraft = useCallback(async () => {
-    if (drafting) return;
-    setDrafting(true);
-    try {
-      const res = await fetch("/api/ai/draft", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversation_id: conversationId }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        if (data.code === "ai_not_configured") {
-          toast.error("AI isn't set up yet — enable it in Settings → AI Assistant.");
-        } else {
-          toast.error(data.error ?? "Couldn't draft a reply.");
+  // composer for the agent to edit + send. Supports Agency Specialist personas.
+  const handleDraft = useCallback(
+    async (specialistId?: string | null) => {
+      if (drafting) return;
+      setDrafting(true);
+      try {
+        const res = await fetch("/api/ai/draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conversation_id: conversationId,
+            agency_agent: specialistId || undefined,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (data.code === "ai_not_configured") {
+            toast.error("AI isn't set up yet — enable it in Settings → AI Assistant.");
+          } else {
+            toast.error(data.error ?? "Couldn't draft a reply.");
+          }
+          return;
         }
-        return;
-      }
-      const draftText = typeof data.draft === "string" ? data.draft.trim() : "";
-      if (!draftText) {
-        toast.error("The assistant didn't return a reply.");
-        return;
-      }
-      setText(draftText);
-      // Let the textarea grow to fit and drop the cursor at the end so
-      // the agent can tweak immediately.
-      requestAnimationFrame(() => {
-        adjustHeight();
-        const el = textareaRef.current;
-        if (el) {
-          el.focus();
-          el.setSelectionRange(el.value.length, el.value.length);
+        const draftText = typeof data.draft === "string" ? data.draft.trim() : "";
+        if (!draftText) {
+          toast.error("The assistant didn't return a reply.");
+          return;
         }
-      });
-    } catch {
-      toast.error("Couldn't reach the AI assistant.");
-    } finally {
-      setDrafting(false);
-    }
-  }, [drafting, conversationId, adjustHeight]);
+        setText(draftText);
+        const spec = getAgencySpecialist(specialistId);
+        if (spec) {
+          toast.success(`Rascunho gerado com ${spec.icon} ${spec.name}`);
+        }
+        // Let the textarea grow to fit and drop the cursor at the end so
+        // the agent can tweak immediately.
+        requestAnimationFrame(() => {
+          adjustHeight();
+          const el = textareaRef.current;
+          if (el) {
+            el.focus();
+            el.setSelectionRange(el.value.length, el.value.length);
+          }
+        });
+      } catch {
+        toast.error("Couldn't reach the AI assistant.");
+      } finally {
+        setDrafting(false);
+      }
+    },
+    [drafting, conversationId, adjustHeight]
+  );
 
   // ---- Interactive message + quick replies --------------------------
 
@@ -709,22 +722,65 @@ export function MessageComposer({
             <LayoutTemplate className="h-4 w-4" />
           </GatedButton>
 
-          <GatedButton
-            variant="ghost"
-            size="sm"
-            canAct={!readOnly}
-            gateReason="send messages"
-            disabled={drafting}
-            title={readOnly ? undefined : t("draftWithAI")}
-            className="h-9 w-9 shrink-0 p-0 text-muted-foreground hover:text-primary"
-            onClick={handleDraft}
-          >
-            {drafting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="h-4 w-4" />
-            )}
-          </GatedButton>
+          {/* The Agency AI Assistant menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              disabled={inputsDisabled || drafting}
+              title={
+                readOnly
+                  ? t("readOnlyTitle")
+                  : inputsDisabled
+                    ? undefined
+                    : "The Agency AI Assistant"
+              }
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md p-0 text-muted-foreground hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {drafting ? (
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-80 border-border bg-popover p-1.5 shadow-lg">
+              <div className="flex items-center justify-between px-2.5 py-1.5 text-xs font-semibold text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  Especialistas da Agency (IA)
+                </span>
+              </div>
+              <DropdownMenuItem
+                onClick={() => void handleDraft(null)}
+                className="cursor-pointer rounded-lg px-2.5 py-2 text-xs focus:bg-accent"
+              >
+                <span className="mr-2.5 text-base">✨</span>
+                <div className="flex flex-col">
+                  <span className="font-semibold text-foreground">Padrão da Empresa</span>
+                  <span className="text-[11px] text-muted-foreground">Prompt e base de conhecimento gerais</span>
+                </div>
+              </DropdownMenuItem>
+              <div className="my-1 h-px bg-border/60" />
+              {ALL_AGENCY_SPECIALISTS.map((spec) => (
+                <DropdownMenuItem
+                  key={spec.id}
+                  onClick={() => void handleDraft(spec.id)}
+                  className="cursor-pointer rounded-lg px-2.5 py-2 text-xs focus:bg-accent"
+                >
+                  <span className="mr-2.5 text-base">{spec.icon}</span>
+                  <div className="flex flex-col">
+                    <span className="flex items-center gap-1.5 font-semibold text-foreground">
+                      {spec.name}
+                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-normal text-primary">
+                        {spec.title}
+                      </span>
+                    </span>
+                    <span className="line-clamp-1 text-[11px] text-muted-foreground">
+                      {spec.description}
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <textarea
             ref={textareaRef}

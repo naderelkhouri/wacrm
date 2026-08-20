@@ -31,8 +31,10 @@ export const metadata: Metadata = {
     follow: false,
   },
   icons: {
-    icon: [{ url: "/icon" }],
+    icon: [{ url: "/icon" }, { url: "/app-icon.png", sizes: "512x512", type: "image/png" }],
+    apple: [{ url: "/app-icon.png" }],
   },
+  manifest: "/manifest.json",
   formatDetection: {
     email: false,
     address: false,
