@@ -135,13 +135,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfileLoading(true);
     lastFetchedUserIdRef.current = userId;
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("profiles")
         .select(
           "id, full_name, email, avatar_url, role, beta_features, account_id, account_role",
         )
         .eq("user_id", userId)
         .maybeSingle();
+
+      if (error && (error.code === "22023" || error.message?.includes("role"))) {
+        console.warn("[AuthProvider] Stale auth session detected, refreshing session...");
+        const { error: refreshErr } = await supabase.auth.refreshSession();
+        if (!refreshErr) {
+          const retry = await supabase
+            .from("profiles")
+            .select(
+              "id, full_name, email, avatar_url, role, beta_features, account_id, account_role",
+            )
+            .eq("user_id", userId)
+            .maybeSingle();
+          data = retry.data;
+          error = retry.error;
+        }
+      }
 
       if (error) {
         console.error("[AuthProvider] fetchProfile error:", error);
