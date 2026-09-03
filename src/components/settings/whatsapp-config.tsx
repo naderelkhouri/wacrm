@@ -13,6 +13,13 @@ import {
   Zap,
   AlertTriangle,
   RotateCcw,
+  Activity,
+  ShieldCheck,
+  Cpu,
+  Send,
+  Terminal,
+  Sparkles,
+  RefreshCw,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -89,10 +96,60 @@ export function WhatsAppConfig() {
   const [registrationProbe, setRegistrationProbe] =
     useState<RegistrationProbe | null>(null);
 
+  // Health Diagnostics & Webhook Simulator state
+  const [healthData, setHealthData] = useState<any>(null);
+  const [loadingHealth, setLoadingHealth] = useState(false);
+  const [simulating, setSimulating] = useState(false);
+  const [simulateText, setSimulateText] = useState('Olá! Esta é uma mensagem de teste do simulador do WACRM.');
+  const [simulateStatus, setSimulateStatus] = useState<string | null>(null);
+
   const webhookUrl =
     typeof window !== 'undefined'
       ? `${window.location.origin}/api/whatsapp/webhook`
       : '';
+
+  const fetchHealth = useCallback(async () => {
+    setLoadingHealth(true);
+    try {
+      const res = await fetch('/api/whatsapp/health');
+      const data = await res.json();
+      if (data.health) {
+        setHealthData(data.health);
+      }
+    } catch (err) {
+      console.error('Failed to load health:', err);
+    } finally {
+      setLoadingHealth(false);
+    }
+  }, []);
+
+  const handleSimulateWebhook = async () => {
+    setSimulating(true);
+    setSimulateStatus(null);
+    try {
+      const res = await fetch('/api/whatsapp/webhook/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'text',
+          text: simulateText,
+          fromPhone: '5511999990000',
+          customerName: 'Cliente Simulado',
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Evento de Webhook simulado e entregue com sucesso!');
+        setSimulateStatus(`Entregue com sucesso! ID: ${data.simulatedMessageId}`);
+      } else {
+        toast.error(data.error || 'Falha na simulação');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao simular');
+    } finally {
+      setSimulating(false);
+    }
+  };
 
   const fetchConfig = useCallback(async (acctId: string) => {
     setLoading(true);
@@ -682,6 +739,201 @@ export function WhatsAppConfig() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Health & Diagnostic Cards */}
+        {config && (
+          <>
+            <Card className="border-border bg-card">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Activity className="size-4 text-primary" />
+                    <CardTitle className="text-foreground text-sm font-semibold">
+                      Diagnóstico de Conexão & Qualidade Meta
+                    </CardTitle>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={fetchHealth}
+                    disabled={loadingHealth}
+                    className="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <RefreshCw className={`size-3.5 ${loadingHealth ? 'animate-spin' : ''}`} />
+                    Atualizar
+                  </Button>
+                </div>
+                <CardDescription className="text-muted-foreground text-xs">
+                  Métricas em tempo real sobre a classificação de qualidade do número e tiers da Graph API.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 pt-0">
+                {healthData ? (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <div className="rounded-md border border-border bg-muted/40 p-2.5">
+                      <div className="text-[11px] font-medium text-muted-foreground">Qualidade</div>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <span
+                          className={`inline-block size-2 rounded-full ${
+                            healthData.phone.quality_rating === 'GREEN'
+                              ? 'bg-green-500'
+                              : healthData.phone.quality_rating === 'YELLOW'
+                              ? 'bg-yellow-500'
+                              : 'bg-red-500'
+                          }`}
+                        />
+                        <span className="text-xs font-semibold text-foreground">
+                          {healthData.phone.quality_rating || 'GREEN'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-md border border-border bg-muted/40 p-2.5">
+                      <div className="text-[11px] font-medium text-muted-foreground">Limite / Tier</div>
+                      <div className="mt-1 text-xs font-semibold text-foreground truncate">
+                        {healthData.phone.messaging_limit_tier?.replace('TIER_', '') || '250'}/dia
+                      </div>
+                    </div>
+
+                    <div className="rounded-md border border-border bg-muted/40 p-2.5">
+                      <div className="text-[11px] font-medium text-muted-foreground">Nome Verificado</div>
+                      <div className="mt-1 text-xs font-semibold text-foreground truncate">
+                        {healthData.phone.verified_name || 'Configurado'}
+                      </div>
+                    </div>
+
+                    <div className="rounded-md border border-border bg-muted/40 p-2.5">
+                      <div className="text-[11px] font-medium text-muted-foreground">Webhook App</div>
+                      <div className="mt-1 flex items-center gap-1 text-xs font-semibold text-foreground">
+                        {healthData.webhook.isSubscribed ? (
+                          <>
+                            <CheckCircle2 className="size-3.5 text-green-500" />
+                            <span>Ativo</span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="size-3.5 text-yellow-500" />
+                            <span>Pendente</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between rounded-md border border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground">
+                    <span>Clique em "Atualizar" para consultar status de qualidade e limites na Meta.</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={fetchHealth}
+                      disabled={loadingHealth}
+                      className="h-7 text-xs"
+                    >
+                      Consultar Meta
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Webhook Event Simulator Card */}
+            <Card className="border-border bg-card">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <Terminal className="size-4 text-primary" />
+                  <CardTitle className="text-foreground text-sm font-semibold">
+                    Simulador de Webhook & Automações
+                  </CardTitle>
+                </div>
+                <CardDescription className="text-muted-foreground text-xs">
+                  Simule o recebimento de mensagens sem gastar créditos da Meta para validar gatilhos, IA e fluxos.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 pt-0">
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Digite a mensagem simulada..."
+                    value={simulateText}
+                    onChange={(e) => setSimulateText(e.target.value)}
+                    className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground"
+                  />
+                  <div className="flex items-center justify-between">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleSimulateWebhook}
+                      disabled={simulating || !simulateText}
+                      className="gap-1.5 text-xs"
+                    >
+                      {simulating ? (
+                        <>
+                          <Loader2 className="size-3.5 animate-spin" />
+                          Simulando...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="size-3.5" />
+                          Disparar Mensagem Simulada
+                        </>
+                      )}
+                    </Button>
+                    {simulateStatus && (
+                      <span className="text-[11px] font-medium text-green-500 truncate max-w-xs">
+                        {simulateStatus}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Model Context Protocol (MCP) Server Card */}
+            <Card className="border-border bg-card">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Cpu className="size-4 text-primary" />
+                    <CardTitle className="text-foreground text-sm font-semibold">
+                      Servidor MCP WACRM (Model Context Protocol)
+                    </CardTitle>
+                  </div>
+                  <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    JSON-RPC 2.0
+                  </span>
+                </div>
+                <CardDescription className="text-muted-foreground text-xs">
+                  Conecte agentes de IA externos (Claude, ChatGPT, Cursor, n8n) para gerenciar contatos, conversas e funis.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 pt-0">
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={typeof window !== 'undefined' ? `${window.location.origin}/api/mcp` : '/api/mcp'}
+                    className="bg-muted border-border text-muted-foreground font-mono text-xs"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        navigator.clipboard.writeText(`${window.location.origin}/api/mcp`);
+                        toast.success('Endpoint MCP copiado!');
+                      }
+                    }}
+                    className="shrink-0 border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                  >
+                    <Copy className="size-4" />
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Autenticação: Use uma <strong>Chave de API</strong> (gerada na aba Chaves de API) no cabeçalho <code className="text-primary font-mono">Authorization: Bearer wacrm_live_...</code>.
+                </p>
+              </CardContent>
+            </Card>
+          </>
+        )}
 
         {/* Action Buttons */}
         <div className="flex flex-wrap gap-3">

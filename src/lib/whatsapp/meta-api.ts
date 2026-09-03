@@ -1042,3 +1042,113 @@ export async function downloadMedia(
   const buffer = Buffer.from(await response.arrayBuffer())
   return { buffer, contentType }
 }
+
+// ============================================================
+// Advanced Connection Health & Diagnostics
+// ============================================================
+
+export interface GetWhatsAppHealthDetailsArgs {
+  phoneNumberId: string
+  wabaId: string
+  accessToken: string
+}
+
+export interface MetaWhatsAppHealth {
+  phone: {
+    id: string
+    display_phone_number: string
+    verified_name?: string
+    quality_rating?: string
+    code_verification_status?: string
+    name_approval_status?: string
+    messaging_limit_tier?: string
+    status?: string
+  }
+  waba: {
+    id: string
+    name?: string
+    currency?: string
+    account_review_status?: string
+    message_template_namespace?: string
+  }
+  webhook: {
+    isSubscribed: boolean
+    subscribedAppsCount: number
+    appName?: string
+  }
+}
+
+/**
+ * Perform an extensive diagnostic check on the WhatsApp Cloud API integration,
+ * querying phone number status, quality rating, messaging limit tier, WABA details,
+ * and webhook subscription state concurrently.
+ */
+export async function getWhatsAppHealthDetails(
+  args: GetWhatsAppHealthDetailsArgs
+): Promise<MetaWhatsAppHealth> {
+  const { phoneNumberId, wabaId, accessToken } = args
+
+  // 1. Query Phone Number details
+  const phoneFields =
+    'id,display_phone_number,verified_name,quality_rating,code_verification_status,name_approval_status,messaging_limit_tier,status'
+  const phonePromise = fetch(
+    `${META_API_BASE}/${phoneNumberId}?fields=${phoneFields}`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  ).then(async (res) => {
+    if (!res.ok) await throwMetaError(res, `Failed to fetch phone status: ${res.status}`)
+    return res.json()
+  })
+
+  // 2. Query WABA details
+  const wabaFields =
+    'id,name,currency,account_review_status,message_template_namespace'
+  const wabaPromise = fetch(
+    `${META_API_BASE}/${wabaId}?fields=${wabaFields}`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  ).then(async (res) => {
+    if (!res.ok) await throwMetaError(res, `Failed to fetch WABA status: ${res.status}`)
+    return res.json()
+  })
+
+  // 3. Query Subscribed Apps for Webhook
+  const subscribedPromise = getSubscribedApps({ wabaId, accessToken }).catch(() => [])
+
+  const [phoneData, wabaData, subscribedApps] = await Promise.all([
+    phonePromise,
+    wabaPromise,
+    subscribedPromise,
+  ])
+
+  const isSubscribed = Array.isArray(subscribedApps) && subscribedApps.length > 0
+  const firstApp = isSubscribed ? subscribedApps[0]?.whatsapp_business_api_data : undefined
+
+  return {
+    phone: {
+      id: phoneData.id || phoneNumberId,
+      display_phone_number: phoneData.display_phone_number || '',
+      verified_name: phoneData.verified_name,
+      quality_rating: phoneData.quality_rating || 'UNKNOWN',
+      code_verification_status: phoneData.code_verification_status,
+      name_approval_status: phoneData.name_approval_status,
+      messaging_limit_tier: phoneData.messaging_limit_tier || 'TIER_250',
+      status: phoneData.status || 'CONNECTED',
+    },
+    waba: {
+      id: wabaData.id || wabaId,
+      name: wabaData.name,
+      currency: wabaData.currency,
+      account_review_status: wabaData.account_review_status,
+      message_template_namespace: wabaData.message_template_namespace,
+    },
+    webhook: {
+      isSubscribed,
+      subscribedAppsCount: Array.isArray(subscribedApps) ? subscribedApps.length : 0,
+      appName: firstApp?.name,
+    },
+  }
+}
+
