@@ -1,11 +1,12 @@
 "use client";
 
-import { Check, Moon, Palette, SunMoon, Sun } from "lucide-react";
+import { Check, Globe, Moon, Palette, SunMoon, Sun } from "lucide-react";
 
 import { useTheme } from "@/hooks/use-theme";
 import { MODES, THEMES, type Mode, type ThemeId } from "@/lib/themes";
+import { SUPPORTED_LOCALES, setLocalePreference } from "@/lib/locales";
 import { cn } from "@/lib/utils";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { SettingsPanelHead } from "./settings-panel-head";
 
 /**
@@ -22,6 +23,7 @@ import { SettingsPanelHead } from "./settings-panel-head";
  */
 export function AppearancePanel() {
   const { theme, setTheme, mode, setMode } = useTheme();
+  const currentLocale = useLocale();
   const t = useTranslations("Settings.appearance");
 
   return (
@@ -31,7 +33,52 @@ export function AppearancePanel() {
         description={t("description")}
       />
 
+      {/* Language Selection */}
       <div className="space-y-4">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Globe className="size-4 text-muted-foreground" />
+          Idioma / Language
+        </h3>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {SUPPORTED_LOCALES.map((loc) => {
+            const isActive =
+              currentLocale === loc.id || (currentLocale === "pt" && loc.id === "pt-BR");
+            return (
+              <button
+                key={loc.id}
+                type="button"
+                onClick={() => {
+                  if (!isActive) setLocalePreference(loc.id);
+                }}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg border bg-card p-3.5 text-left transition-colors",
+                  isActive
+                    ? "border-primary/60 ring-2 ring-primary/40"
+                    : "border-border hover:border-border hover:bg-muted/40"
+                )}
+              >
+                <span className="text-2xl leading-none">{loc.flag}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-semibold text-foreground">
+                    {loc.nativeName}
+                  </div>
+                  <div className="truncate text-[11px] text-muted-foreground">
+                    {loc.name}
+                  </div>
+                </div>
+                {isActive && (
+                  <span className="inline-flex items-center rounded-full bg-primary/15 p-1 text-primary">
+                    <Check className="h-3 w-3" />
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mt-8 space-y-4">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <SunMoon className="size-4 text-muted-foreground" />
           {t("mode")}

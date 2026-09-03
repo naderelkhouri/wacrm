@@ -17,9 +17,14 @@ Whenever receiving a task, automatically identify the primary domain and apply t
 - **QA & Verification**: Adopt `agency-qa-engineer` + `agency-evidence-collector` + `agency-reality-checker` (evidence required before completion, run unit/integration tests).
 - **Growth & Marketing**: Adopt `agency-growth-hacker` + `agency-seo-specialist`.
 - **Sales & Operations**: Adopt `agency-deal-strategist` + `agency-outbound-strategist` + `agency-workflow-architect`.
+- **Social Commerce & Vendas Automáticas**: Adopt `agency-social-commerce-architect` + `agency-growth-hacker` + `agency-workflow-architect` (TikTok/YouTube Shop, fábricas de vídeo IA, conversão conversacional, painéis de GMV).
 
 ## 2. Autonomous Quality Gates
 - **Dev ↔ QA Loop**: Every implementation must be verified with execution, tests, or concrete output before finalizing.
 - **Evidence-Based Approval**: Never assume code works; verify via commands, tests, or inspection.
 - **Continuous Orchestration**: For complex, multi-step projects, act as `agency-agents-orchestrator`: decompose into spec -> architecture -> task loop -> QA validation -> release gate.
+
+## 3. Visual & Diagram Standards (Permanent Rule)
+- **NO Mermaid Diagrams**: NEVER use Mermaid (````mermaid````) diagrams.
+- **Alternative Visual Formats**: Use clean **ASCII / Unicode Box-Drawing diagrams** (`┌─┐`, `│`, `└─┘`, `──▶`, `▼`), structured hierarchical trees, or markdown matrix tables for flows, architectures, and graphs.
 

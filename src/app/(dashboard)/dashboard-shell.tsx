@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
+import { OnboardingProvider } from "@/hooks/use-onboarding";
+import { OnboardingModal } from "@/components/onboarding/onboarding-modal";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { PresenceHeartbeat } from "@/components/presence/presence-heartbeat";
@@ -50,6 +52,8 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
         {/* Thinner horizontal padding on mobile so cards have room to breathe. */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
       </div>
+      {/* Global Onboarding / Interactive Tutorial Modal */}
+      <OnboardingModal />
     </div>
   );
 }
@@ -57,7 +61,9 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
-      <DashboardShellInner>{children}</DashboardShellInner>
+      <OnboardingProvider>
+        <DashboardShellInner>{children}</DashboardShellInner>
+      </OnboardingProvider>
     </AuthProvider>
   );
 }

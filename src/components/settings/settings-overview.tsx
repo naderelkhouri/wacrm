@@ -1,15 +1,17 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronRight, Loader2, Sparkles } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import { useOnboarding } from '@/hooks/use-onboarding';
 import { useTheme } from '@/hooks/use-theme';
 import { THEMES } from '@/lib/themes';
 import { CURRENCIES } from '@/lib/currency';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
@@ -38,6 +40,7 @@ export function SettingsOverview({
 }) {
   const { user, profile, accountId, accountRole, defaultCurrency, canManageMembers } =
     useAuth();
+  const { status: onboardingStatus, openModal: openOnboardingModal } = useOnboarding();
   const { mode, theme } = useTheme();
   const t = useTranslations('Settings.overview');
   const tRoles = useTranslations('Settings.roles');
@@ -248,6 +251,32 @@ export function SettingsOverview({
           </SettingsChip>
         ) : null}
       </Card>
+
+      {/* Onboarding Assistant Banner */}
+      {onboardingStatus && !onboardingStatus.allCompleted && (
+        <Card className="mt-4 flex-row items-center justify-between gap-4 border-primary/25 bg-primary/5 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+              <Sparkles className="size-4" />
+            </span>
+            <div>
+              <div className="text-sm font-semibold text-foreground">
+                Configuração da Conta ({onboardingStatus.completedCount} de {onboardingStatus.totalCount} concluídos)
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Siga o tutorial guiado para conectar o WhatsApp, IA e convidar sua equipe.
+              </div>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => openOnboardingModal()}
+            className="shrink-0 bg-primary text-xs text-primary-foreground hover:bg-primary/90"
+          >
+            Abrir Tutorial
+          </Button>
+        </Card>
+      )}
 
       {/* Status tiles */}
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

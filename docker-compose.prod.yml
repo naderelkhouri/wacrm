@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  app:
+    image: wacrm:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: "https://api-db.admx.tech"
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg1NTM1NDI2LCJleHAiOjIxMDA4OTU0MjZ9.azgQJhy7QawNIwjg_dUqWwsX3KefX8jkgTOTGRtGbM8"
+        NEXT_PUBLIC_SITE_URL: "https://wacrm.admx.tech"
+        NEXT_PUBLIC_APP_LOCALE: "pt-BR"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_SUPABASE_URL=https://api-db.admx.tech
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg1NTM1NDI2LCJleHAiOjIxMDA4OTU0MjZ9.azgQJhy7QawNIwjg_dUqWwsX3KefX8jkgTOTGRtGbM8
+      - SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UiLCJpYXQiOjE3ODU1MzU0MjYsImV4cCI6MjEwMDg5NTQyNn0.nas7_A9meifCH9F3qbkDVpgJ7dD1suKJcRXbihWxFwg
+      - ENCRYPTION_KEY=a363676a922845e7366760aacc0f9b8ee3732c66c851ef73b8e5100b1dd9c395
+      - META_APP_SECRET=local-dummy-meta-secret
+      - NEXT_PUBLIC_SITE_URL=https://wacrm.admx.tech
+      - ALLOWED_INVITE_HOSTS=wacrm.admx.tech
+      - AUTOMATION_CRON_SECRET=f598388d59fbb8f151eb26c6a1de1810c32b651e461ac7f4d638041596cc6e79
+      - NEXT_PUBLIC_APP_LOCALE=pt-BR
+      - PORT=3000
+    networks:
+      - network_core_stack
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == core-manager
+      restart_policy:
+        condition: on-failure
+
+networks:
+  network_core_stack:
+    external: true
