@@ -192,3 +192,116 @@ describe('generateReply — Anthropic', () => {
     expect(body.messages).toHaveLength(1)
   })
 })
+
+describe('generateReply — Google AI', () => {
+  it('calls the generateContent endpoint with x-goog-api-key header and parses candidate text', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      okResponse({
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'Hello from Gemini!' }],
+              role: 'model',
+            },
+            finishReason: 'STOP',
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 25,
+          candidatesTokenCount: 5,
+          totalTokenCount: 30,
+        },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await generateReply({
+      config: config({ provider: 'google', model: 'gemini-2.5-flash', apiKey: 'AIza-test' }),
+      systemPrompt: 'sys-gemini',
+      messages: [{ role: 'user', content: 'Hi Gemini' }],
+    })
+
+    expect(res).toEqual({
+      text: 'Hello from Gemini!',
+      handoff: false,
+      usage: { promptTokens: 25, completionTokens: 5, totalTokens: 30 },
+    })
+
+    const [url, opts] = fetchMock.mock.calls[0]
+    expect(url).toContain('generativelanguage.googleapis.com')
+    expect(url).toContain('gemini-2.5-flash:generateContent')
+    expect(opts.headers['x-goog-api-key']).toBe('AIza-test')
+
+    const body = JSON.parse(opts.body)
+    expect(body.system_instruction.parts[0].text).toBe('sys-gemini')
+    expect(body.contents[0].role).toBe('user')
+    expect(body.contents[0].parts[0].text).toBe('Hi Gemini')
+  })
+
+  it('detects handoff in the model output', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        okResponse({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'Transferring to human... [[HANDOFF]]' }],
+                role: 'model',
+              },
+            },
+          ],
+        }),
+      ),
+    )
+    const res = await generateReply({
+      config: config({ provider: 'google' }),
+      systemPrompt: 'sys',
+      messages: [{ role: 'user', content: 'I want a human' }],
+    })
+    expect(res.handoff).toBe(true)
+    expect(res.text).toBe('Transferring to human...')
+  })
+
+  it('drops leading assistant turns so contents start on user', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      okResponse({
+        candidates: [{ content: { parts: [{ text: 'Sure' }] } }],
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await generateReply({
+      config: config({ provider: 'google' }),
+      systemPrompt: 'sys',
+      messages: [
+        { role: 'assistant', content: 'Hi there!' },
+        { role: 'user', content: 'Question' },
+      ],
+    })
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.contents[0].role).toBe('user')
+    expect(body.contents).toHaveLength(1)
+  })
+
+  it('maps an API error response properly', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        errResponse(400, {
+          error: { message: 'API key not valid. Please pass a valid API key.', status: 'INVALID_ARGUMENT' },
+        }),
+      ),
+    )
+
+    await expect(
+      generateReply({
+        config: config({ provider: 'google' }),
+        systemPrompt: 'sys',
+        messages: [{ role: 'user', content: 'Hi' }],
+      }),
+    ).rejects.toMatchObject({ code: 'provider_error', status: 502 })
+  })
+})
+
