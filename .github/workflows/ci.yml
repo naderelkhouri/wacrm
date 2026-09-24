@@ -5,6 +5,7 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
 
 # Cancel older CI runs for the same branch when a new commit arrives —
 # saves minutes when someone pushes a stack of fixes to one PR.
@@ -51,3 +52,61 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  deploy:
+    name: Deploy to Production (Docker Swarm)
+    needs: [check]
+    runs-on: [self-hosted, Linux, X64, wacrm-deploy]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Sync application files to stack directory
+        run: |
+          set -euo pipefail
+          echo "Sincronizando arquivos para /root/stacks/wacrm..."
+          sudo rsync -av --delete \
+            --exclude='.git' \
+            --exclude='.next' \
+            --exclude='node_modules' \
+            --exclude='.env*' \
+            ./ /root/stacks/wacrm/
+          if [ ! -f "/root/stacks/wacrm/.env.local" ] && [ -f "/root/stacks/wacrm/.env.local.backup" ]; then
+            sudo cp /root/stacks/wacrm/.env.local.backup /root/stacks/wacrm/.env.local
+            sudo chmod 600 /root/stacks/wacrm/.env.local
+          fi
+
+      - name: Build production image
+        run: |
+          set -euo pipefail
+          echo "Compilando imagem Docker wacrm:latest..."
+          cd /root/stacks/wacrm
+          sudo docker build -t wacrm:latest -f Dockerfile .
+
+      - name: Update Swarm service
+        run: |
+          set -euo pipefail
+          echo "Atualizando serviço wacrm_app no Swarm..."
+          sudo docker service update --image wacrm:latest --force wacrm_app
+          sudo docker service ps wacrm_app --no-trunc
+          sudo docker image prune -af
+
+      - name: Smoke Test Live Site
+        run: |
+          set -euo pipefail
+          echo "=== Verificando disponibilidade da aplicação ==="
+          for attempt in $(seq 1 15); do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://wacrm.admx.tech/ || true)
+            echo "Tentativa $attempt: HTTP $HTTP_CODE"
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "307" ] || [ "$HTTP_CODE" = "302" ]; then
+              echo "✅ WACRM está online e respondendo (HTTP $HTTP_CODE)!"
+              exit 0
+            fi
+            sleep 4
+          done
+          echo "❌ Falha no smoke test: código retornado foi $HTTP_CODE"
+          exit 1
+
+
