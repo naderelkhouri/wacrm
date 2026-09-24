@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     const timestamp = Math.floor(Date.now() / 1000).toString()
     const simulatedMsgId = `wamid.simulated_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
 
-    let entryChangeValue: any = {
+    const entryChangeValue: any = {
       messaging_product: 'whatsapp',
       metadata: {
         display_phone_number: '5511900000000',

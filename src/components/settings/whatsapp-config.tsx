@@ -821,7 +821,7 @@ export function WhatsAppConfig() {
                   </div>
                 ) : (
                   <div className="flex items-center justify-between rounded-md border border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground">
-                    <span>Clique em "Atualizar" para consultar status de qualidade e limites na Meta.</span>
+                    <span>Clique em &quot;Atualizar&quot; para consultar status de qualidade e limites na Meta.</span>
                     <Button
                       variant="outline"
                       size="sm"

@@ -114,7 +114,7 @@ export async function POST(request: Request) {
     }
 
     // Generate Optimized Text
-    let optimizedText = bodyText
+    const optimizedText = bodyText
       // Fix single braces {1} -> {{1}}
       .replace(/\{(\d+)\}/g, '{{$1}}')
       // Fix multiple exclamation marks
