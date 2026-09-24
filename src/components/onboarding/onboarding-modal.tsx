@@ -117,6 +117,7 @@ export function OnboardingModal() {
 
   useEffect(() => {
     if (isModalOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveStepIndex(currentModalStep || 0);
     }
   }, [isModalOpen, currentModalStep]);
