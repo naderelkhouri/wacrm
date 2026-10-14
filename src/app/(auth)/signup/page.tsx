@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -14,7 +14,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { MessageSquare, CheckCircle, UsersRound } from "lucide-react";
+import {
+  MessageSquare,
+  CheckCircle,
+  UsersRound,
+  Lock,
+  MailCheck,
+  Loader2,
+  KeyRound,
+} from "lucide-react";
 
 // `useSearchParams` opts the component out of static prerendering
 // unless wrapped in Suspense — same pattern as /login.
@@ -35,6 +43,11 @@ function SignupPageInner() {
   // step after verifying instead of being dropped on /dashboard.
   const inviteToken = searchParams.get("invite");
 
+  const [checkingMode, setCheckingMode] = useState(true);
+  const [signupMode, setSignupMode] = useState<"open" | "invite_only" | "closed">("open");
+  const [isInviteValid, setIsInviteValid] = useState<boolean>(false);
+  const [manualInviteInput, setManualInviteInput] = useState("");
+
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,6 +56,40 @@ function SignupPageInner() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const supabase = createClient();
+
+  useEffect(() => {
+    let active = true;
+    async function checkSignupStatus() {
+      setCheckingMode(true);
+      try {
+        const query = inviteToken
+          ? `?invite=${encodeURIComponent(inviteToken)}`
+          : "";
+        const res = await fetch(`/api/auth/signup-mode${query}`, {
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error("Could not check signup mode");
+        const data = await res.json();
+        if (active) {
+          setSignupMode(data.mode ?? "open");
+          setIsInviteValid(Boolean(data.invite?.valid));
+        }
+      } catch {
+        if (active) {
+          setSignupMode("open");
+        }
+      } finally {
+        if (active) {
+          setCheckingMode(false);
+        }
+      }
+    }
+
+    checkSignupStatus();
+    return () => {
+      active = false;
+    };
+  }, [inviteToken]);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,6 +122,7 @@ function SignupPageInner() {
         options: {
           data: {
             full_name: fullName,
+            invite_token: inviteToken || undefined,
           },
           ...(emailRedirectTo ? { emailRedirectTo } : {}),
         },
@@ -108,6 +156,100 @@ function SignupPageInner() {
     }
   };
 
+  if (checkingMode) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // State: Signups Closed
+  if (signupMode === "closed") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md border-border bg-card">
+          <CardHeader className="items-center text-center">
+            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-red-500/10">
+              <Lock className="h-6 w-6 text-red-400" />
+            </div>
+            <CardTitle className="text-xl text-foreground">
+              Cadastros Temporariamente Pausados
+            </CardTitle>
+            <CardDescription className="text-muted-foreground text-center">
+              A criação de novas contas e perfis está temporariamente desativada no WACRM. Entre em contato com o suporte ou acesse sua conta existente.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Link href="/login">
+              <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
+                Voltar para o Login
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // State: Invite Only and no valid invite token provided
+  if (signupMode === "invite_only" && !isInviteValid) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md border-border bg-card">
+          <CardHeader className="items-center text-center">
+            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+              <MailCheck className="h-6 w-6 text-primary" />
+            </div>
+            <CardTitle className="text-xl text-foreground">
+              Acesso Exclusivo por Convite
+            </CardTitle>
+            <CardDescription className="text-muted-foreground text-center">
+              A criação de novas contas está disponível apenas para usuários convidados por uma organização existente.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="manualToken" className="text-xs text-muted-foreground">
+                Possui um código ou link de convite?
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  id="manualToken"
+                  placeholder="Cole o código do convite aqui..."
+                  value={manualInviteInput}
+                  onChange={(e) => setManualInviteInput(e.target.value)}
+                  className="border-border bg-muted text-foreground placeholder:text-muted-foreground"
+                />
+                <Button
+                  onClick={() => {
+                    const token = manualInviteInput.trim();
+                    if (token) {
+                      window.location.href = `/signup?invite=${encodeURIComponent(token)}`;
+                    }
+                  }}
+                  disabled={!manualInviteInput.trim()}
+                  className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  <KeyRound className="size-4 mr-1" />
+                  Validar
+                </Button>
+              </div>
+            </div>
+
+            <div className="pt-2 text-center text-sm text-muted-foreground">
+              Já possui uma conta?{" "}
+              <Link href="/login" className="text-primary hover:text-primary/80 font-medium">
+                Entrar
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // State: Success screen after registration
   if (success) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -146,6 +288,7 @@ function SignupPageInner() {
     );
   }
 
+  // Standard registration form (either open mode, or valid invite)
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md border-border bg-card">

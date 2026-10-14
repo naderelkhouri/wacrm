@@ -75,7 +75,7 @@ export function Header({ onOpenSidebar }: HeaderProps) {
         </h1>
       </div>
 
-      <div className="flex items-center gap-1 sm:gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
         <HeaderOnboardingBadge />
         <LanguageSwitcher />
         <ModeToggle />

@@ -117,9 +117,10 @@ export const RATE_LIMITS = {
   /** Individual message send. 60/min per user = one per second
    *  sustained, comfortable for a live human typing. */
   send: { limit: 60, windowMs: 60_000 },
-  /** Broadcast dispatch. 5/min per user — even a 1 000-recipient
-   *  broadcast is one call; this caps the rate at which a single user
-   *  can launch campaigns, not the messages inside one. */
+  /** Broadcast batch dispatch. In the client-driven wizard architecture,
+   *  campaigns are dispatched in batches of up to 10 recipients. 5 requests/min
+   *  caps dispatch throughput to 50 recipients/min per user. Client loops
+   *  must respect Retry-After on 429 and wait before retrying the next batch. */
   broadcast: { limit: 5, windowMs: 60_000 },
   /** Reaction add/swap/remove. More permissive than send — users
    *  fidget with reactions and a single "swap" is actually two calls
@@ -134,6 +135,8 @@ export const RATE_LIMITS = {
    *  successful redemption mutates two profiles and an invite row, so
    *  the abuse surface is "spam join attempts." */
   invitationRedeem: { limit: 10, windowMs: 60_000 },
+  /** Public platform signup mode query (per-IP). */
+  signupMode: { limit: 60, windowMs: 60_000 },
   /** Admin-only account / member-management actions: create/revoke
    *  invitation, rename account, change member role, remove member,
    *  transfer ownership. 30/min per user is comfortably above any

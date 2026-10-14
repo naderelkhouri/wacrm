@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/flows/admin-client'
 import { findActiveKeyByHash, touchLastUsed } from '@/lib/api-keys/store'
@@ -8,7 +9,7 @@ import { decrypt } from '@/lib/whatsapp/encryption'
 
 interface MCPContext {
   accountId: string
-  supabase: any
+  supabase: SupabaseClient
   userId?: string | null
 }
 
@@ -182,7 +183,7 @@ const MCP_TOOLS = [
   },
 ]
 
-async function handleToolCall(name: string, args: Record<string, any>, ctx: MCPContext) {
+async function handleToolCall(name: string, args: Record<string, unknown>, ctx: MCPContext) {
   const { accountId, supabase } = ctx
 
   switch (name) {
@@ -195,9 +196,9 @@ async function handleToolCall(name: string, args: Record<string, any>, ctx: MCPC
       ])
 
       const totalContacts = contactsRes.count ?? 0
-      const openDeals = (dealsRes.data ?? []).filter((d: any) => d.status === 'open')
-      const totalDealsValue = openDeals.reduce((sum: number, d: any) => sum + (Number(d.value) || 0), 0)
-      const totalUnread = (convsRes.data ?? []).reduce((sum: number, c: any) => sum + (c.unread_count || 0), 0)
+      const openDeals = ((dealsRes.data as Array<{ value: number | null; status: string }>) ?? []).filter((d) => d.status === 'open')
+      const totalDealsValue = openDeals.reduce((sum: number, d) => sum + (Number(d.value) || 0), 0)
+      const totalUnread = ((convsRes.data as Array<{ id: string; unread_count: number | null }>) ?? []).reduce((sum: number, c) => sum + (c.unread_count || 0), 0)
 
       return {
         account_id: accountId,
@@ -215,7 +216,7 @@ async function handleToolCall(name: string, args: Record<string, any>, ctx: MCPC
       if (args.query) {
         query = query.or(`name.ilike.%${args.query}%,phone.ilike.%${args.query}%,email.ilike.%${args.query}%`)
       }
-      query = query.order('created_at', { ascending: false }).limit(args.limit || 20)
+      query = query.order('created_at', { ascending: false }).limit(Number(args.limit) || 20)
       const { data, error } = await query
       if (error) throw error
       return { contacts: data ?? [] }
@@ -245,7 +246,7 @@ async function handleToolCall(name: string, args: Record<string, any>, ctx: MCPC
         .maybeSingle()
 
       if (existing) {
-        const updateData: any = { updated_at: new Date().toISOString() }
+        const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() }
         if (args.name) updateData.name = args.name
         if (args.email) updateData.email = args.email
         if (args.company) updateData.company = args.company
@@ -284,7 +285,7 @@ async function handleToolCall(name: string, args: Record<string, any>, ctx: MCPC
         .eq('account_id', accountId)
 
       if (args.unreadOnly) query = query.gt('unread_count', 0)
-      query = query.order('updated_at', { ascending: false }).limit(args.limit || 20)
+      query = query.order('updated_at', { ascending: false }).limit(Number(args.limit) || 20)
 
       const { data, error } = await query
       if (error) throw error
@@ -298,7 +299,7 @@ async function handleToolCall(name: string, args: Record<string, any>, ctx: MCPC
         .eq('account_id', accountId)
         .eq('contact_id', args.contactId)
         .order('created_at', { ascending: true })
-        .limit(args.limit || 50)
+        .limit(Number(args.limit) || 50)
 
       if (error) throw error
       return { messages: messages ?? [] }
@@ -329,7 +330,7 @@ async function handleToolCall(name: string, args: Record<string, any>, ctx: MCPC
         phoneNumberId: config.phone_number_id,
         accessToken,
         to: contact.phone,
-        text: args.message,
+        text: String(args.message || ''),
       })
 
       // Insert message record into database
@@ -359,7 +360,7 @@ async function handleToolCall(name: string, args: Record<string, any>, ctx: MCPC
 
     case 'wacrm_create_or_move_deal': {
       if (args.dealId) {
-        const updatePayload: any = { updated_at: new Date().toISOString() }
+        const updatePayload: Record<string, unknown> = { updated_at: new Date().toISOString() }
         if (args.stageId) updatePayload.stage_id = args.stageId
         if (args.value !== undefined) updatePayload.value = args.value
         if (args.title) updatePayload.title = args.title
@@ -513,7 +514,8 @@ export async function POST(request: Request) {
             ],
           },
         })
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err)
         return NextResponse.json({
           jsonrpc: '2.0',
           id,
@@ -522,7 +524,7 @@ export async function POST(request: Request) {
             content: [
               {
                 type: 'text',
-                text: `Tool error: ${err.message || String(err)}`,
+                text: `Tool error: ${message}`,
               },
             ],
           },
@@ -535,10 +537,11 @@ export async function POST(request: Request) {
       id,
       error: { code: -32601, message: `Method not found: ${method}` },
     })
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[/api/mcp] Handler error:', err)
+    const message = err instanceof Error ? err.message : 'Internal JSON-RPC Error'
     return NextResponse.json(
-      { jsonrpc: '2.0', error: { code: -32603, message: err.message || 'Internal JSON-RPC Error' }, id: null },
+      { jsonrpc: '2.0', error: { code: -32603, message }, id: null },
       { status: 500 }
     )
   }

@@ -55,6 +55,11 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${baseUrl}${safeNext}`);
   }
 
-  // If no code and no error, check if user requested a specific next destination or fall back to login
+  // If no code and no error, redirect to requested safe destination (e.g. /reset-password)
+  // preserving any hash fragment in client browser navigation
+  if (safeNext && safeNext !== '/dashboard') {
+    return NextResponse.redirect(`${baseUrl}${safeNext}`);
+  }
+
   return NextResponse.redirect(`${baseUrl}/login`);
 }

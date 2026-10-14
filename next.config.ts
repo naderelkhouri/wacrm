@@ -51,11 +51,11 @@ const SECURITY_HEADERS = [
       "img-src 'self' data: blob: https:",
       // Outbound media previews (blob: from MediaRecorder + file picker)
       // and Supabase public-bucket audio/video the inbox renders.
-      "media-src 'self' blob: https://*.supabase.co https://*.admx.tech",
+      "media-src 'self' blob: https://*.supabase.co https://*.admx.tech https://*.wcloudapi.dev https://wcloudapi.dev",
       "font-src 'self' data:",
       // Supabase REST + realtime (WSS). All Meta API calls happen
       // server-side, so graph.facebook.com does not belong here.
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.admx.tech wss://*.admx.tech https://cloudflareinsights.com",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.admx.tech wss://*.admx.tech https://*.wcloudapi.dev wss://*.wcloudapi.dev https://wcloudapi.dev wss://wcloudapi.dev https://cloudflareinsights.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
@@ -86,6 +86,8 @@ const nextConfig: NextConfig = {
     "*.ngrok.io",
     "*.trycloudflare.com",
     "*.loca.lt",
+    "*.wcloudapi.dev",
+    "wcloudapi.dev",
     ...(process.env.ALLOWED_DEV_ORIGINS
       ? process.env.ALLOWED_DEV_ORIGINS.split(",")
           .map((origin) => origin.trim())

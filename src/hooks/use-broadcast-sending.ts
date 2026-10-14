@@ -52,6 +52,7 @@ interface UseBroadcastSendingReturn {
   createAndSendBroadcast: (payload: BroadcastPayload) => Promise<string>;
   isProcessing: boolean;
   progress: number;
+  rateLimitWaitSeconds: number | null;
 }
 
 /**
@@ -151,6 +152,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
   const { accountId } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [rateLimitWaitSeconds, setRateLimitWaitSeconds] = useState<number | null>(null);
 
   async function resolveAudience(audience: AudienceConfig): Promise<Contact[]> {
     const supabase = createClient();
@@ -473,25 +475,71 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
 
         if (apiRecipients.length === 0) continue;
 
-        try {
-          const res = await fetch('/api/whatsapp/broadcast', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              recipients: apiRecipients,
-              template_name: payload.template.name,
-              template_language: payload.template.language ?? 'en_US',
-            }),
-          });
+        const MAX_RATE_LIMIT_RETRIES = 5;
+        let batchResults: BroadcastApiResult[] | null = null;
+        let batchError: string | null = null;
+        let rateLimitRetries = 0;
 
-          const data = await res.json();
+        while (rateLimitRetries <= MAX_RATE_LIMIT_RETRIES) {
+          try {
+            const res = await fetch('/api/whatsapp/broadcast', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                recipients: apiRecipients,
+                template_name: payload.template.name,
+                template_language: payload.template.language ?? 'en_US',
+              }),
+            });
 
-          if (!res.ok) {
-            throw new Error(data.error || 'Broadcast API request failed');
+            if (res.status === 429) {
+              rateLimitRetries++;
+              if (rateLimitRetries > MAX_RATE_LIMIT_RETRIES) {
+                batchError = 'Rate limit exceeded: maximum retries exhausted';
+                break;
+              }
+
+              const retryAfterHeader = res.headers.get('Retry-After');
+              let waitSec = retryAfterHeader ? parseInt(retryAfterHeader, 10) : 0;
+              if (!waitSec || isNaN(waitSec) || waitSec <= 0) {
+                try {
+                  const data429 = await res.clone().json();
+                  waitSec = data429.retry_after_seconds || 5;
+                } catch {
+                  waitSec = 5;
+                }
+              }
+
+              // Update UI with countdown while waiting
+              for (let s = waitSec; s > 0; s--) {
+                setRateLimitWaitSeconds(s);
+                await sleep(1000);
+              }
+              setRateLimitWaitSeconds(null);
+              // Small safety margin to ensure window reset has elapsed
+              await sleep(500);
+              continue;
+            }
+
+            const data = await res.json();
+
+            if (!res.ok) {
+              batchError = data.error || 'Broadcast API request failed';
+              break;
+            }
+
+            batchResults = (data.results ?? []) as BroadcastApiResult[];
+            break;
+          } catch (err) {
+            // Ambiguous network/runtime error: do NOT blindly retry to avoid duplicate messages
+            batchError = err instanceof Error ? err.message : 'Unknown error';
+            break;
           }
+        }
 
+        if (batchResults) {
           const resultsByPhone = new Map<string, BroadcastApiResult>();
-          for (const r of (data.results ?? []) as BroadcastApiResult[]) {
+          for (const r of batchResults) {
             resultsByPhone.set(r.phone, r);
           }
 
@@ -532,14 +580,14 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
                 .eq('id', recipient.id);
             }
           }
-        } catch (err) {
+        } else {
           for (const recipient of batch) {
             failedCount++;
             await supabase
               .from('broadcast_recipients')
               .update({
                 status: 'failed',
-                error_message: err instanceof Error ? err.message : 'Unknown error',
+                error_message: batchError || 'Unknown error',
               })
               .eq('id', recipient.id);
           }
@@ -568,8 +616,9 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
       return broadcast.id;
     } finally {
       setIsProcessing(false);
+      setRateLimitWaitSeconds(null);
     }
   }
 
-  return { createAndSendBroadcast, isProcessing, progress };
+  return { createAndSendBroadcast, isProcessing, progress, rateLimitWaitSeconds };
 }

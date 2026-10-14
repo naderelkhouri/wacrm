@@ -14,6 +14,11 @@ const messageInserts: Array<Record<string, unknown>> = []
 // Toggles for the per-test scenario.
 let existingConversation: Record<string, unknown> | null = null
 let contactRow: Record<string, unknown> | null = null
+let profileRow: Record<string, unknown> | null = {
+  account_id: 'acct-1',
+  account_role: 'agent',
+}
+let currentUser: Record<string, unknown> | null = { id: 'user-1' }
 // A conversation created during the request becomes retrievable by id —
 // the shared send core re-loads the conversation (with its contact) from
 // just the id, so the mock must model insert-then-select-by-id.
@@ -35,7 +40,7 @@ function makeSupabaseMock() {
     const selectResult = () => {
       switch (table) {
         case 'profiles':
-          return { data: { account_id: 'acct-1' }, error: null }
+          return { data: profileRow, error: null }
         case 'contacts':
           return { data: contactRow, error: null }
         case 'conversations':
@@ -110,8 +115,8 @@ function makeSupabaseMock() {
   return {
     auth: {
       getUser: vi.fn(async () => ({
-        data: { user: { id: 'user-1' } },
-        error: null,
+        data: { user: currentUser },
+        error: currentUser ? null : new Error('Unauthorized'),
       })),
     },
     from: vi.fn((table: string) => builder(table)),
@@ -179,6 +184,8 @@ describe('POST /api/whatsapp/send — contact_id template path', () => {
     existingConversation = null
     createdConversation = null
     contactRow = CONTACT
+    currentUser = { id: 'user-1' }
+    profileRow = { account_id: 'acct-1', account_role: 'agent' }
     supabaseMock = makeSupabaseMock()
     sendTemplateMessage.mockClear()
   })
@@ -257,5 +264,61 @@ describe('POST /api/whatsapp/send — contact_id template path', () => {
       }),
     )
     expect(res.status).toBe(400)
+  })
+
+  it('rejects sending when caller has viewer role (403 Forbidden)', async () => {
+    profileRow = { account_id: 'acct-1', account_role: 'viewer' }
+    const res = await postContactTemplate()
+    const json = await res.json()
+
+    expect(res.status).toBe(403)
+    expect(json.error).toMatch(/insufficient permissions/i)
+    expect(conversationInserts).toHaveLength(0)
+    expect(messageInserts).toHaveLength(0)
+    expect(sendTemplateMessage).not.toHaveBeenCalled()
+  })
+
+  it('rejects unauthenticated requests with 401', async () => {
+    currentUser = null
+    const res = await postContactTemplate()
+    const json = await res.json()
+
+    expect(res.status).toBe(401)
+    expect(json.error).toMatch(/unauthorized/i)
+    expect(conversationInserts).toHaveLength(0)
+    expect(messageInserts).toHaveLength(0)
+    expect(sendTemplateMessage).not.toHaveBeenCalled()
+  })
+
+  it('rejects when caller profile is not linked to an account with 403', async () => {
+    profileRow = { account_id: null, account_role: 'agent' }
+    const res = await postContactTemplate()
+    const json = await res.json()
+
+    expect(res.status).toBe(403)
+    expect(json.error).toMatch(/not linked to an account/i)
+    expect(conversationInserts).toHaveLength(0)
+    expect(messageInserts).toHaveLength(0)
+    expect(sendTemplateMessage).not.toHaveBeenCalled()
+  })
+
+  it('allows admin role to send template message', async () => {
+    profileRow = { account_id: 'acct-1', account_role: 'admin' }
+    const res = await postContactTemplate()
+    const json = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(json.success).toBe(true)
+    expect(sendTemplateMessage).toHaveBeenCalledTimes(1)
+  })
+
+  it('allows owner role to send template message', async () => {
+    profileRow = { account_id: 'acct-1', account_role: 'owner' }
+    const res = await postContactTemplate()
+    const json = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(json.success).toBe(true)
+    expect(sendTemplateMessage).toHaveBeenCalledTimes(1)
   })
 })

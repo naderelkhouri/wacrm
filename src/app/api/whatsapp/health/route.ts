@@ -96,13 +96,14 @@ export async function GET() {
       health,
       lastUpdated: config.updated_at,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[/api/whatsapp/health] Error:', error)
+    const message = error instanceof Error ? error.message : 'Failed to check WhatsApp health status.'
     return NextResponse.json(
       {
         healthy: false,
         reason: 'meta_api_error',
-        message: error.message || 'Failed to check WhatsApp health status.',
+        message,
       },
       { status: 200 }
     )

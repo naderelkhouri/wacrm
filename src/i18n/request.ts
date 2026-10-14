@@ -32,7 +32,7 @@ export default getRequestConfig(async () => {
   let messages;
   try {
     messages = (await import(`../../messages/${locale}.json`)).default;
-  } catch (error) {
+  } catch {
     // Fallback hierarchy: pt-BR -> en
     try {
       messages = (await import(`../../messages/pt-BR.json`)).default;

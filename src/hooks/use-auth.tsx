@@ -43,6 +43,8 @@ interface AccountSummary {
   /** Default deal currency (ISO-4217). NOT NULL DEFAULT 'USD' in the
    *  DB (migration 021); narrowed to DEFAULT_CURRENCY when absent. */
   default_currency: string;
+  allow_member_invites?: boolean;
+  max_members?: number | null;
 }
 
 interface AuthContextValue {
@@ -182,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .from("accounts")
             // default_currency added in migration 021; narrowed to the
             // USD fallback below for older schemas where it reads null.
-            .select("id, name, default_currency")
+            .select("id, name, default_currency, allow_member_invites, max_members")
             .eq("id", data.account_id)
             .maybeSingle();
           if (accountErr) {
@@ -192,6 +194,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               id: account.id,
               name: account.name,
               default_currency: account.default_currency ?? DEFAULT_CURRENCY,
+              allow_member_invites: account.allow_member_invites ?? true,
+              max_members: account.max_members ?? null,
             };
           }
         }
@@ -254,18 +258,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!mounted) return;
         const currentUser = session?.user ?? null;
-        setUser(currentUser);
 
         if (currentUser) {
-          // Don't block session loading on profile fetch — chrome
-          // (header, sidebar) can render from the user object alone,
-          // profile enriches async. Callers that need to branch on
-          // profile data gate on `profileLoading` instead.
+          setUser(currentUser);
           fetchProfile(currentUser.id);
         } else {
-          // No user → no profile to load. Flip profileLoading off so
-          // pages that gate on it don't wait forever on the logged-out
-          // path (the route guard or redirect should fire instead).
+          // Check Django authenticated user
+          try {
+            const djangoRes = await fetch("/api/auth/django-me");
+            if (djangoRes.ok) {
+              const { user: dUser } = await djangoRes.json();
+              if (dUser && mounted) {
+                const syntheticUser: User = {
+                  id: String(dUser.id),
+                  app_metadata: {},
+                  user_metadata: { full_name: dUser.full_name },
+                  aud: "authenticated",
+                  created_at: dUser.created_at,
+                  email: dUser.email,
+                };
+                setUser(syntheticUser);
+                setProfile({
+                  id: String(dUser.id),
+                  full_name: dUser.full_name,
+                  email: dUser.email,
+                  avatar_url: null,
+                  role: dUser.role,
+                  beta_features: [],
+                  account_id: String(dUser.last_active_company || 1),
+                  account_role: "owner",
+                });
+                setAccount({
+                  id: String(dUser.last_active_company || 1),
+                  name: "ADMX Tech",
+                  default_currency: "BRL",
+                });
+                setProfileLoading(false);
+                setLoading(false);
+                clearTimeout(safetyTimer);
+                return;
+              }
+            }
+          } catch (e) {
+            console.error("[AuthProvider] Django me check failed:", e);
+          }
+          setUser(null);
           setProfileLoading(false);
         }
       } catch (err) {
@@ -307,6 +344,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchProfile]);
 
   const signOut = useCallback(async () => {
+    try {
+      await fetch('/api/auth/django-logout', { method: 'POST' });
+    } catch {}
     const supabase = createClient();
     await supabase.auth.signOut();
     setUser(null);

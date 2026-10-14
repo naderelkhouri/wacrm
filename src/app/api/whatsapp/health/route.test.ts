@@ -1,6 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { GET } from './route'
-import * as encryption from '@/lib/whatsapp/encryption'
 import * as metaApi from '@/lib/whatsapp/meta-api'
 
 const mockGetUser = vi.fn()

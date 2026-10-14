@@ -22,12 +22,7 @@ export interface OnboardingStatusResponse {
 
 export async function GET() {
   try {
-    const { supabase, accountId, userId, profile } = (await getCurrentAccount()) as unknown as {
-      supabase: any;
-      accountId: string;
-      userId: string;
-      profile?: any;
-    };
+    const { supabase, accountId, userId } = await getCurrentAccount();
 
     // Parallel fetch of all setup criteria
     const [

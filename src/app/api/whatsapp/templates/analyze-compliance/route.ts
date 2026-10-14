@@ -22,12 +22,8 @@ export async function POST(request: Request) {
 
     const body = await request.json()
     const {
-      name,
       category,
-      language = 'pt_BR',
-      headerText = '',
       bodyText = '',
-      footerText = '',
     } = body
 
     if (!bodyText) {
@@ -133,10 +129,11 @@ export async function POST(request: Request) {
       suggestedCategory,
       optimizedText,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[/api/whatsapp/templates/analyze-compliance] Error:', error)
+    const message = error instanceof Error ? error.message : 'Failed to analyze template compliance'
     return NextResponse.json(
-      { error: error.message || 'Failed to analyze template compliance' },
+      { error: message },
       { status: 500 }
     )
   }

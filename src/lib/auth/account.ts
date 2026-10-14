@@ -87,8 +87,14 @@ export interface AccountContext {
   accountId: string;
   /** Caller's role within their account. */
   role: AccountRole;
-  /** Lightweight account meta — id + name. */
-  account: { id: string; name: string };
+  /** Lightweight account meta — id, name, currency and member invitation settings. */
+  account: {
+    id: string;
+    name: string;
+    default_currency?: string;
+    allow_member_invites?: boolean;
+    max_members?: number | null;
+  };
 }
 
 /**
@@ -149,7 +155,7 @@ export async function getCurrentAccount(): Promise<AccountContext> {
   // RLS, so it stays robust against cache staleness and older schemas.
   const { data: account, error: accountErr } = await supabase
     .from("accounts")
-    .select("id, name")
+    .select("id, name, default_currency, allow_member_invites, max_members")
     .eq("id", data.account_id)
     .maybeSingle();
 
@@ -168,7 +174,13 @@ export async function getCurrentAccount(): Promise<AccountContext> {
     userId: user.id,
     accountId: data.account_id,
     role: data.account_role,
-    account: { id: account.id, name: account.name },
+    account: {
+      id: account.id,
+      name: account.name,
+      default_currency: account.default_currency,
+      allow_member_invites: account.allow_member_invites ?? true,
+      max_members: account.max_members ?? null,
+    },
   };
 }
 

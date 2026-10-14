@@ -36,7 +36,7 @@ vi.mock("@supabase/ssr", () => ({
 }));
 
 // Imported after the mock is registered.
-const { middleware } = await import("./middleware");
+const { middleware } = await import("./proxy");
 
 beforeEach(() => {
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://test.supabase.co";
@@ -109,5 +109,34 @@ describe("middleware — refreshed auth cookies survive redirects", () => {
     // No redirect — the normal NextResponse.next() already carries cookies.
     expect(res.headers.get("location")).toBeNull();
     expect(res.cookies.get(ROTATED.name)?.value).toBe(ROTATED.value);
+  });
+
+  it("passes through for a user with a valid Django JWT token", async () => {
+    mockUser = null;
+    const futureExp = Math.floor(Date.now() / 1000) + 3600;
+    const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+    const payload = btoa(JSON.stringify({ user_id: 1, exp: futureExp }));
+    const validDjangoToken = `${header}.${payload}.sig`;
+
+    const req = new NextRequest("https://app.test/dashboard");
+    req.cookies.set("django_access_token", validDjangoToken);
+
+    const res = await middleware(req);
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  it("redirects a user with a valid Django JWT off /login to /dashboard", async () => {
+    mockUser = null;
+    const futureExp = Math.floor(Date.now() / 1000) + 3600;
+    const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+    const payload = btoa(JSON.stringify({ user_id: 1, exp: futureExp }));
+    const validDjangoToken = `${header}.${payload}.sig`;
+
+    const req = new NextRequest("https://app.test/login");
+    req.cookies.set("django_access_token", validDjangoToken);
+
+    const res = await middleware(req);
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain("/dashboard");
   });
 });

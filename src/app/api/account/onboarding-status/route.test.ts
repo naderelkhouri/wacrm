@@ -53,7 +53,7 @@ describe('/api/account/onboarding-status', () => {
           select: vi.fn().mockReturnThis(),
           eq: vi.fn().mockReturnThis(),
           is: vi.fn().mockReturnThis(),
-          then: (resolve: any) => resolve({ count: 0 }),
+          then: (resolve: (res: { count: number }) => void) => resolve({ count: 0 }),
         };
       }),
     };

@@ -130,6 +130,28 @@ export default function ContactsPage() {
     const to = from + PAGE_SIZE - 1;
     const term = search.trim();
 
+    // 1. Try unified contacts API endpoint (Django DRF / server-side)
+    try {
+      const sp = new URLSearchParams();
+      if (term) sp.set('search', term);
+      sp.set('limit', String(PAGE_SIZE));
+      sp.set('offset', String(from));
+
+      const apiRes = await fetch(`/api/contacts?${sp.toString()}`);
+      if (apiRes.ok) {
+        const json = await apiRes.json();
+        if (seq !== fetchSeq.current) return;
+        if (json.contacts) {
+          setContacts(json.contacts);
+          setTotalCount(json.totalCount || 0);
+          setLoading(false);
+          return;
+        }
+      }
+    } catch {
+      // Ignore and proceed to client-side Supabase query fallback
+    }
+
     let contactRows: Contact[];
     let count: number;
 
@@ -214,12 +236,12 @@ export default function ContactsPage() {
   // synchronously in the effect body, so the cascade the lint rule
   // warns about doesn't apply here.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     fetchTags();
   }, [fetchTags]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     fetchContacts();
   }, [fetchContacts]);
 
@@ -354,10 +376,11 @@ export default function ContactsPage() {
             <Button
               variant="outline"
               onClick={() => setCustomFieldsOpen(true)}
+              title={t('customFieldsBtn')}
               className="border-border text-muted-foreground hover:bg-muted"
             >
               <SlidersHorizontal className="size-4" />
-              {t('customFieldsBtn')}
+              <span className="hidden sm:inline">{t('customFieldsBtn')}</span>
             </Button>
           )}
           <GatedButton
@@ -365,10 +388,11 @@ export default function ContactsPage() {
             canAct={canEdit}
             gateReason="add or import contacts"
             onClick={() => setImportOpen(true)}
+            title={t('importBtn')}
             className="border-border text-muted-foreground hover:bg-muted"
           >
             <Upload className="size-4" />
-            {t('importBtn')}
+            <span className="hidden sm:inline">{t('importBtn')}</span>
           </GatedButton>
           <GatedButton
             canAct={canEdit}
@@ -377,7 +401,7 @@ export default function ContactsPage() {
             className="bg-primary hover:bg-primary/90 text-primary-foreground"
           >
             <Plus className="size-4" />
-            {t('addContactBtn')}
+            <span>{t('addContactBtn')}</span>
           </GatedButton>
         </div>
       </div>

@@ -14,13 +14,12 @@ import {
   AlertTriangle,
   RotateCcw,
   Activity,
-  ShieldCheck,
   Cpu,
   Send,
   Terminal,
-  Sparkles,
   RefreshCw,
 } from 'lucide-react';
+import type { MetaWhatsAppHealth } from '@/lib/whatsapp/meta-api';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { useTranslations } from 'next-intl';
@@ -97,7 +96,7 @@ export function WhatsAppConfig() {
     useState<RegistrationProbe | null>(null);
 
   // Health Diagnostics & Webhook Simulator state
-  const [healthData, setHealthData] = useState<any>(null);
+  const [healthData, setHealthData] = useState<MetaWhatsAppHealth | null>(null);
   const [loadingHealth, setLoadingHealth] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [simulateText, setSimulateText] = useState('Olá! Esta é uma mensagem de teste do simulador do WACRM.');
@@ -144,8 +143,9 @@ export function WhatsAppConfig() {
       } else {
         toast.error(data.error || 'Falha na simulação');
       }
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao simular');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao simular';
+      toast.error(msg);
     } finally {
       setSimulating(false);
     }
@@ -237,7 +237,7 @@ export function WhatsAppConfig() {
     if (loadedAccountIdRef.current === accountId) return;
     loadedAccountIdRef.current = accountId;
     fetchConfig(accountId);
-  }, [authLoading, profileLoading, user?.id, accountId, fetchConfig]);
+  }, [authLoading, profileLoading, user, accountId, fetchConfig]);
 
   async function handleSave() {
     if (!phoneNumberId.trim()) {

@@ -10,6 +10,7 @@ import {
   validateSendMessageParams,
   SendMessageError,
 } from '@/lib/whatsapp/send-message'
+import { canSendMessages, isAccountRole, type AccountRole } from '@/lib/auth/roles'
 
 // The dashboard's outbound-send endpoint. It owns auth, per-user rate
 // limiting, and the two ways the UI targets a thread — an existing
@@ -49,13 +50,21 @@ export async function POST(request: Request) {
     // returned nothing for teammates who didn't author the row.
     const { data: profile } = await supabase
       .from('profiles')
-      .select('account_id')
+      .select('account_id, account_role')
       .eq('user_id', user.id)
       .maybeSingle()
     const accountId = profile?.account_id as string | undefined
     if (!accountId) {
       return NextResponse.json(
         { error: 'Your profile is not linked to an account.' },
+        { status: 403 },
+      )
+    }
+
+    const accountRole = profile?.account_role as AccountRole | undefined
+    if (!accountRole || !isAccountRole(accountRole) || !canSendMessages(accountRole)) {
+      return NextResponse.json(
+        { error: 'Forbidden: Insufficient permissions to send messages' },
         { status: 403 },
       )
     }

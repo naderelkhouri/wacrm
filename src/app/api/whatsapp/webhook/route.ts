@@ -1,7 +1,7 @@
 import { NextResponse, after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption'
-import { getMediaUrl, downloadMedia } from '@/lib/whatsapp/meta-api'
+import { getMediaUrl } from '@/lib/whatsapp/meta-api'
 import { normalizePhone } from '@/lib/whatsapp/phone-utils'
 import { findExistingContact, isUniqueViolation } from '@/lib/contacts/dedupe'
 import { verifyMetaWebhookSignature } from '@/lib/whatsapp/webhook-signature'
@@ -666,6 +666,23 @@ async function processMessage(
     .eq('sender_type', 'customer')
   const isFirstInboundMessage = (priorCustomerMsgCount ?? 0) === 0
 
+  // Deduplication check: if message.id is present, ignore if already received (replay)
+  if (message.id) {
+    const { data: existingMsg } = await supabaseAdmin()
+      .from('messages')
+      .select('id')
+      .eq('conversation_id', conversation.id)
+      .eq('message_id', message.id)
+      .limit(1)
+
+    if (existingMsg && existingMsg.length > 0) {
+      console.warn(
+        `[webhook] duplicate message_id ignored (replay): ${message.id}`
+      )
+      return
+    }
+  }
+
   const { error: msgError } = await supabaseAdmin().from('messages').insert({
     conversation_id: conversation.id,
     sender_type: 'customer',
@@ -683,24 +700,20 @@ async function processMessage(
   })
 
   if (msgError) {
+    if (isUniqueViolation(msgError)) {
+      console.warn(
+        `[webhook] duplicate message_id rejected by DB constraint (replay): ${message.id}`
+      )
+      return
+    }
     console.error('Error inserting message:', msgError)
     return
   }
 
-  // Update conversation
-  const { error: convError } = await supabaseAdmin()
-    .from('conversations')
-    .update({
-      last_message_text: contentText || `[${message.type}]`,
-      last_message_at: new Date().toISOString(),
-      unread_count: (conversation.unread_count || 0) + 1,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', conversation.id)
-
-  if (convError) {
-    console.error('Error updating conversation:', convError)
-  }
+  // Note: Conversations summary (last_message_text, last_message_at, updated_at)
+  // and atomic unread_count increment are handled transactionally by the DB
+  // trigger `trg_increment_unread_count_on_customer_message` installed in
+  // migration 038. This eliminates race conditions and duplicate counting.
 
   // If this contact was a recent broadcast recipient, flag the reply
   // so the broadcast's `replied_count` advances (via the aggregate

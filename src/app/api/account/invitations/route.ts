@@ -168,6 +168,29 @@ export async function POST(request: Request) {
   try {
     const ctx = await requireRole("admin");
 
+    // Check if the organization has paused new member invites
+    if (ctx.account.allow_member_invites === false) {
+      return NextResponse.json(
+        { error: "A criação de novos convites de membros está desativada para esta organização." },
+        { status: 403 },
+      );
+    }
+
+    // Check optional member capacity limit
+    if (ctx.account.max_members && ctx.account.max_members > 0) {
+      const { count, error: countErr } = await ctx.supabase
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("account_id", ctx.accountId);
+
+      if (!countErr && count !== null && count >= ctx.account.max_members) {
+        return NextResponse.json(
+          { error: `Limite máximo de ${ctx.account.max_members} membros atingido para esta organização.` },
+          { status: 403 },
+        );
+      }
+    }
+
     // 30/min per user. The Members tab is a clicks-only UI so any
     // legitimate admin is far below this; the cap exists to keep
     // a script run in a loop or a compromised admin session from

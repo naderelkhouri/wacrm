@@ -27,10 +27,18 @@ import {
   RefreshCw,
   PanelRightOpen,
   PanelRightClose,
+  Info,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { ContactSidebar } from "./contact-sidebar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,7 +46,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { MessageBubble } from "./message-bubble";
 import { MessageActions } from "./message-actions";
 import {
@@ -179,6 +186,7 @@ export function MessageThread({
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [reactions, setReactions] = useState<MessageReaction[]>([]);
+  const [mobileContactOpen, setMobileContactOpen] = useState(false);
   // Purely visual spin state for the manual-refresh button. The actual
   // refetch is fire-and-forget through `onRefresh` (which bumps the
   // parent's resyncToken); the 700ms spin is just feedback so the click
@@ -750,7 +758,7 @@ export function MessageThread({
         preview: buildReplyPreview(msg, tQuote),
       });
     },
-    [authorLabelFor],
+    [authorLabelFor, tQuote],
   );
 
   // Single reaction-set primitive. emoji === "" removes; otherwise adds/swaps.
@@ -894,12 +902,26 @@ export function MessageThread({
               <ArrowLeft className="h-5 w-5" />
             </button>
           )}
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
-            {displayName.charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-foreground">{displayName}</h2>
-            <p className="truncate text-xs text-muted-foreground">{contact.phone}</p>
+          <div
+            onClick={() => setMobileContactOpen(true)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") setMobileContactOpen(true);
+            }}
+            aria-label="Ver detalhes e notas do contato"
+            className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg p-1 transition-colors hover:bg-muted/50 sm:gap-3 lg:cursor-default lg:hover:bg-transparent"
+          >
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
+              {displayName.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <h2 className="flex items-center gap-1.5 truncate text-sm font-semibold text-foreground">
+                <span className="truncate">{displayName}</span>
+                <Info className="h-3.5 w-3.5 shrink-0 text-muted-foreground lg:hidden" />
+              </h2>
+              <p className="truncate text-xs text-muted-foreground">{contact.phone}</p>
+            </div>
           </div>
           {/* Session timer badge — hidden on the narrowest phones so
               the name + back arrow keep their room. */}
@@ -1166,6 +1188,25 @@ export function MessageThread({
         onOpenChange={setTemplateModalOpen}
         onSelect={handleSendTemplate}
       />
+
+      {/* Mobile Contact Sheet — view tags, deals, and notes directly on phone */}
+      <Sheet open={mobileContactOpen} onOpenChange={setMobileContactOpen}>
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-md p-0 bg-card border-border text-foreground"
+        >
+          <div className="flex h-full flex-col">
+            <SheetHeader className="border-b border-border p-4">
+              <SheetTitle className="text-sm font-semibold text-foreground">
+                {displayName}
+              </SheetTitle>
+            </SheetHeader>
+            <div className="flex-1 overflow-y-auto">
+              <ContactSidebar contact={contact} className="w-full border-l-0" />
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

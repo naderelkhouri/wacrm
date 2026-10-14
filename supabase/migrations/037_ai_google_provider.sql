@@ -1,5 +1,5 @@
 -- ============================================================
--- 034_ai_google_provider.sql — Allow Google AI as a provider in ai_configs
+-- 037_ai_google_provider.sql — Allow Google AI as a provider in ai_configs
 --
 -- Extends the provider check constraint on ai_configs to support
 -- 'google' (Google AI Gemini API).

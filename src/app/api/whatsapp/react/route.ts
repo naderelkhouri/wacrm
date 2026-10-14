@@ -8,6 +8,7 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit';
+import { canSendMessages, isAccountRole, type AccountRole } from '@/lib/auth/roles';
 
 /**
  * POST /api/whatsapp/react
@@ -40,13 +41,21 @@ export async function POST(request: Request) {
     // lookups work for teammates who didn't author the rows directly.
     const { data: profile } = await supabase
       .from('profiles')
-      .select('account_id')
+      .select('account_id, account_role')
       .eq('user_id', user.id)
       .maybeSingle();
     const accountId = profile?.account_id as string | undefined;
     if (!accountId) {
       return NextResponse.json(
         { error: 'Your profile is not linked to an account.' },
+        { status: 403 },
+      );
+    }
+
+    const accountRole = profile?.account_role as AccountRole | undefined;
+    if (!accountRole || !isAccountRole(accountRole) || !canSendMessages(accountRole)) {
+      return NextResponse.json(
+        { error: 'Forbidden: Insufficient permissions to react to messages' },
         { status: 403 },
       );
     }

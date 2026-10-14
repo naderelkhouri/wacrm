@@ -175,9 +175,8 @@ export default function PipelinesPage() {
   // callbacks (not synchronous in the effect body).
   useEffect(() => {
     if (!selectedPipelineId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setStages([]);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDeals([]);
       return;
     }
@@ -372,10 +371,11 @@ export default function PipelinesPage() {
             canAct={canEditSettings}
             gateReason="create pipelines"
             onClick={() => setNewPipelineOpen(true)}
+            title={t("addPipeline")}
             className="border-border bg-card text-foreground hover:bg-muted"
           >
-            <Plus className="mr-1 h-4 w-4" />
-            {t("addPipeline")}
+            <Plus className="h-4 w-4 sm:mr-1" />
+            <span className="hidden sm:inline">{t("addPipeline")}</span>
           </GatedButton>
           <GatedButton
             canAct={canCreateDeals}
@@ -385,7 +385,7 @@ export default function PipelinesPage() {
             className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="mr-1 h-4 w-4" />
-            {t("addDeal")}
+            <span>{t("addDeal")}</span>
           </GatedButton>
         </div>
       </div>

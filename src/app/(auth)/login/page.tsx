@@ -50,13 +50,32 @@ function LoginPageInner() {
     setLoading(true);
 
     try {
+      // 1. Try Django authentication
+      const djangoRes = await fetch('/api/auth/django-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: email, password }),
+      });
+
+      if (djangoRes.ok) {
+        // Also silently authenticate Supabase if credentials match, but don't block
+        supabase.auth.signInWithPassword({ email, password }).catch(() => {});
+        const destination = inviteToken
+          ? `/join/${encodeURIComponent(inviteToken)}`
+          : "/dashboard";
+        window.location.href = destination;
+        return;
+      }
+
+      // 2. Fallback to Supabase
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
-        setError(error.message);
+        const djangoData = await djangoRes.json().catch(() => null);
+        setError(djangoData?.error || error.message);
         setLoading(false);
         return;
       }

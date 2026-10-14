@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,7 +38,6 @@ export default function ResetPasswordPage() {
 }
 
 function ResetPasswordForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const initialError = searchParams.get("error");
 
@@ -57,6 +56,20 @@ function ResetPasswordForm() {
 
     const checkSession = async () => {
       try {
+        const code = searchParams.get("code");
+        if (code) {
+          const { data, error: exchangeError } =
+            await supabase.auth.exchangeCodeForSession(code);
+          if (!exchangeError && data?.session) {
+            if (mounted) {
+              setHasSession(true);
+              setCheckingSession(false);
+            }
+            return;
+          }
+        }
+
+        // Check if session is already active
         const {
           data: { session },
         } = await supabase.auth.getSession();
@@ -65,18 +78,40 @@ function ResetPasswordForm() {
 
         if (session) {
           setHasSession(true);
-        } else {
-          // If hash params contain access_token (implicit flow fallback)
+          return;
+        }
+
+        // If hash params contain access_token and refresh_token, establish session immediately
+        if (typeof window !== "undefined" && window.location.hash) {
+          const hashParams = new URLSearchParams(window.location.hash.substring(1));
+          const access_token = hashParams.get("access_token");
+          const refresh_token = hashParams.get("refresh_token");
+
+          if (access_token && refresh_token) {
+            const { data: sessionData, error: setSessionErr } =
+              await supabase.auth.setSession({
+                access_token,
+                refresh_token,
+              });
+
+            if (!setSessionErr && sessionData?.session) {
+              if (mounted) {
+                setHasSession(true);
+              }
+              return;
+            }
+          }
+
           if (
-            typeof window !== "undefined" &&
-            (window.location.hash.includes("access_token") ||
-              window.location.hash.includes("type=recovery"))
+            window.location.hash.includes("access_token") ||
+            window.location.hash.includes("type=recovery")
           ) {
             setHasSession(true);
-          } else {
-            setHasSession(false);
+            return;
           }
         }
+
+        setHasSession(false);
       } catch (err) {
         console.error("[ResetPassword] session check error:", err);
       } finally {
@@ -107,7 +142,7 @@ function ResetPasswordForm() {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [supabase]);
+  }, [supabase, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,6 +161,17 @@ function ResetPasswordForm() {
     setLoading(true);
 
     try {
+      // Ensure session is established if available in URL hash
+      const { data: currentSession } = await supabase.auth.getSession();
+      if (!currentSession?.session && typeof window !== "undefined" && window.location.hash) {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const access_token = hashParams.get("access_token");
+        const refresh_token = hashParams.get("refresh_token");
+        if (access_token && refresh_token) {
+          await supabase.auth.setSession({ access_token, refresh_token });
+        }
+      }
+
       const { error: updateError } = await supabase.auth.updateUser({
         password,
       });

@@ -33,7 +33,7 @@ describe('POST /api/whatsapp/webhook/simulate', () => {
       status: 200,
       ok: true,
       text: () => Promise.resolve('EVENT_RECEIVED'),
-    } as any)
+    } as unknown as Response)
   })
 
   it('returns 401 when user is unauthorized', async () => {

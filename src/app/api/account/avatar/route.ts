@@ -90,10 +90,11 @@ export async function POST(request: Request) {
       success: true,
       avatarUrl: publicUrl,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[/api/account/avatar] Error:', error)
+    const message = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: message },
       { status: 500 }
     )
   }
@@ -129,9 +130,10 @@ export async function DELETE() {
     }
 
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: message },
       { status: 500 }
     )
   }

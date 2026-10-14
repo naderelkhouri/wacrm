@@ -32,7 +32,7 @@ describe('POST /api/whatsapp/templates/analyze-compliance', () => {
     expect(res.status).toBe(200)
     const json = await res.json()
     expect(json.passed).toBe(false)
-    expect(json.risks.some((r: any) => r.rule === 'META_VARIABLE_DOUBLE_BRACES')).toBe(true)
+    expect(json.risks.some((r: { rule: string }) => r.rule === 'META_VARIABLE_DOUBLE_BRACES')).toBe(true)
     expect(json.optimizedText).toContain('{{1}}')
   })
 
@@ -64,7 +64,7 @@ describe('POST /api/whatsapp/templates/analyze-compliance', () => {
     const res = await POST(req)
     expect(res.status).toBe(200)
     const json = await res.json()
-    expect(json.risks.some((r: any) => r.rule === 'META_NO_URL_SHORTENERS')).toBe(true)
+    expect(json.risks.some((r: { rule: string }) => r.rule === 'META_NO_URL_SHORTENERS')).toBe(true)
   })
 
   it('approves a compliant template', async () => {

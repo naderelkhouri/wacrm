@@ -15,6 +15,7 @@ import {
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit'
+import { canSendMessages, isAccountRole, type AccountRole } from '@/lib/auth/roles'
 
 interface BroadcastResult {
   phone: string
@@ -22,6 +23,14 @@ interface BroadcastResult {
   whatsapp_message_id?: string
   error?: string
 }
+
+/**
+ * Maximum recipients allowed per batch request.
+ * In the client-driven wizard architecture, broadcasts are dispatched in batches
+ * (typically 10 recipients per request). Capping the batch size server-side prevents
+ * circumvention of rate limits and prevents timeouts on serverless runtimes.
+ */
+export const MAX_BROADCAST_BATCH_SIZE = 50;
 
 /**
  * Two input shapes are accepted:
@@ -85,13 +94,21 @@ export async function POST(request: Request) {
     // by a teammate.
     const { data: profile } = await supabase
       .from('profiles')
-      .select('account_id')
+      .select('account_id, account_role')
       .eq('user_id', user.id)
       .maybeSingle()
     const accountId = profile?.account_id as string | undefined
     if (!accountId) {
       return NextResponse.json(
         { error: 'Your profile is not linked to an account.' },
+        { status: 403 },
+      )
+    }
+
+    const accountRole = profile?.account_role as AccountRole | undefined
+    if (!accountRole || !isAccountRole(accountRole) || !canSendMessages(accountRole)) {
+      return NextResponse.json(
+        { error: 'Forbidden: Insufficient permissions to send broadcasts' },
         { status: 403 },
       )
     }
@@ -125,6 +142,27 @@ export async function POST(request: Request) {
         },
         { status: 400 }
       )
+    }
+
+    if (recipients.length > MAX_BROADCAST_BATCH_SIZE) {
+      return NextResponse.json(
+        {
+          error: `Batch size exceeds maximum limit of ${MAX_BROADCAST_BATCH_SIZE} recipients per request.`,
+        },
+        { status: 400 },
+      )
+    }
+
+    for (let idx = 0; idx < recipients.length; idx++) {
+      const r = recipients[idx]
+      if (!r || typeof r.phone !== 'string' || !r.phone.trim()) {
+        return NextResponse.json(
+          {
+            error: `Recipient at index ${idx} is missing a valid phone number`,
+          },
+          { status: 400 },
+        )
+      }
     }
 
     if (!template_name) {

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { supabaseAdmin } from '@/lib/flows/admin-client'
 
 /**
  * POST /api/whatsapp/webhook/simulate
@@ -53,7 +52,7 @@ export async function POST(request: Request) {
     const timestamp = Math.floor(Date.now() / 1000).toString()
     const simulatedMsgId = `wamid.simulated_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
 
-    const entryChangeValue: any = {
+    const entryChangeValue: Record<string, unknown> = {
       messaging_product: 'whatsapp',
       metadata: {
         display_phone_number: '5511900000000',
@@ -145,10 +144,11 @@ export async function POST(request: Request) {
       webhookStatus,
       payload,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[/api/whatsapp/webhook/simulate] Error:', error)
+    const message = error instanceof Error ? error.message : 'Failed to simulate webhook event'
     return NextResponse.json(
-      { error: error.message || 'Failed to simulate webhook event' },
+      { error: message },
       { status: 500 }
     )
   }

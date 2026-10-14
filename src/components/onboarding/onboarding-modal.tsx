@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
   PlugZap,
@@ -13,11 +13,9 @@ import {
   Circle,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
   Sparkles,
   ArrowRight,
   ShieldCheck,
-  Check,
 } from "lucide-react";
 import { useOnboarding } from "@/hooks/use-onboarding";
 import {
@@ -114,13 +112,17 @@ const STEP_DETAILS: Record<
 export function OnboardingModal() {
   const { status, isModalOpen, closeModal, currentModalStep } = useOnboarding();
   const [activeStepIndex, setActiveStepIndex] = useState(0);
+  const [prevModalOpen, setPrevModalOpen] = useState(isModalOpen);
+  const [prevStep, setPrevStep] = useState(currentModalStep);
 
-  useEffect(() => {
+  if (isModalOpen !== prevModalOpen || currentModalStep !== prevStep) {
+    setPrevModalOpen(isModalOpen);
+    setPrevStep(currentModalStep);
     if (isModalOpen) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveStepIndex(currentModalStep || 0);
     }
-  }, [isModalOpen, currentModalStep]);
+  }
 
   if (!status) return null;
 

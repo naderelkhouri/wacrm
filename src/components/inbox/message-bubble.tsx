@@ -110,6 +110,7 @@ function MediaImage({ url, alt }: { url: string; alt: string }) {
   }
 
   return (
+    /* eslint-disable-next-line @next/next/no-img-element -- Dynamic WhatsApp media blob / presigned CDN URLs */
     <img
       src={src ?? ""}
       alt={alt}

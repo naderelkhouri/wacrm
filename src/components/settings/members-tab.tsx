@@ -72,6 +72,7 @@ import {
   PRESENCE_DOT_CLASS,
   PresenceDot,
 } from '@/components/presence/presence-dot';
+import { Switch } from '@/components/ui/switch';
 import { InviteMemberDialog } from './invite-member-dialog';
 import { SettingsPanelHead } from './settings-panel-head';
 import { ROLE_META } from './role-meta';
@@ -127,12 +128,51 @@ function fmtExpiresIn(iso: string, t: (key: string, values?: Record<string, stri
 export function MembersTab() {
   const t = useTranslations('Settings.members');
   const tRoles = useTranslations('Settings.roles');
-  const { user, canManageMembers } = useAuth();
+  const { user, canManageMembers, account, refreshProfile } = useAuth();
   const { getPresence, getRow, now } = usePresence();
 
   const [members, setMembers] = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [allowInvites, setAllowInvites] = useState<boolean>(
+    account?.allow_member_invites ?? true,
+  );
+  const [togglingInvites, setTogglingInvites] = useState(false);
+
+  useEffect(() => {
+    if (account?.allow_member_invites !== undefined) {
+      setAllowInvites(account.allow_member_invites);
+    }
+  }, [account?.allow_member_invites]);
+
+  async function handleToggleInvites(checked: boolean) {
+    setTogglingInvites(true);
+    try {
+      const res = await fetch('/api/account', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allow_member_invites: checked }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        toast.error(payload.error || 'Falha ao atualizar permissão de convites');
+        return;
+      }
+      setAllowInvites(checked);
+      toast.success(
+        checked
+          ? 'Convites de membros liberados'
+          : 'Convites de membros pausados',
+      );
+      await refreshProfile();
+    } catch (err) {
+      console.error('[MembersTab] toggle invites error:', err);
+      toast.error('Não foi possível conectar ao servidor');
+    } finally {
+      setTogglingInvites(false);
+    }
+  }
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [removingMember, setRemovingMember] = useState<Member | null>(null);
@@ -287,13 +327,61 @@ export function MembersTab() {
         description={t('description')}
         action={
           <RequireRole min="admin">
-            <Button onClick={() => setInviteOpen(true)}>
-              <Plus className="size-4" />
-              {t('inviteMember')}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span>
+                    <Button
+                      onClick={() => setInviteOpen(true)}
+                      disabled={!allowInvites}
+                    >
+                      <Plus className="size-4" />
+                      {t('inviteMember')}
+                    </Button>
+                  </span>
+                }
+              />
+              {!allowInvites && (
+                <TooltipContent>
+                  Novos convites de membros estão pausados para esta organização
+                </TooltipContent>
+              )}
+            </Tooltip>
           </RequireRole>
         }
       />
+
+      <RequireRole min="admin">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-border bg-card p-4">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-foreground">
+                Permitir novos convites de equipe
+              </span>
+              <Badge
+                variant={allowInvites ? "secondary" : "outline"}
+                className={
+                  allowInvites
+                    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                    : "border-amber-500/20 text-amber-400"
+                }
+              >
+                {allowInvites ? "Convites liberados" : "Convites pausados"}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Quando desativado, novos links de convite não poderão ser gerados para esta organização.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={allowInvites}
+              onCheckedChange={handleToggleInvites}
+              disabled={togglingInvites}
+            />
+          </div>
+        </div>
+      </RequireRole>
 
       {/* Live presence summary across the roster. Updates without a
           full refresh as heartbeats and the local re-derive tick land. */}

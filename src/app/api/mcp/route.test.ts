@@ -1,7 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { GET, POST } from './route'
 import * as keysStore from '@/lib/api-keys/store'
-import * as keysGen from '@/lib/api-keys/keys'
 
 const mockGetUser = vi.fn()
 const mockMaybeSingle = vi.fn()
@@ -71,7 +70,11 @@ describe('WACRM MCP Server (/api/mcp)', () => {
       id: 'k1',
       account_id: 'acc123',
       created_by: 'u1',
-    } as any)
+      name: 'Test key',
+      scopes: ['*'],
+      expires_at: null,
+      revoked_at: null,
+    })
 
     const req = new Request('http://localhost:3000/api/mcp', {
       method: 'POST',
@@ -97,7 +100,11 @@ describe('WACRM MCP Server (/api/mcp)', () => {
       id: 'k1',
       account_id: 'acc123',
       created_by: 'u1',
-    } as any)
+      name: 'Test key',
+      scopes: ['*'],
+      expires_at: null,
+      revoked_at: null,
+    })
 
     const req = new Request('http://localhost:3000/api/mcp', {
       method: 'POST',
@@ -115,7 +122,7 @@ describe('WACRM MCP Server (/api/mcp)', () => {
     expect(res.status).toBe(200)
     const json = await res.json()
     expect(Array.isArray(json.result.tools)).toBe(true)
-    const toolNames = json.result.tools.map((t: any) => t.name)
+    const toolNames = (json.result.tools as Array<{ name: string }>).map((t) => t.name)
     expect(toolNames).toContain('wacrm_get_overview')
     expect(toolNames).toContain('wacrm_search_contacts')
     expect(toolNames).toContain('wacrm_send_whatsapp_message')

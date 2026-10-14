@@ -53,27 +53,61 @@ export async function PATCH(request: Request) {
     if (!limit.success) return rateLimitResponse(limit);
 
     const body = (await request.json().catch(() => null)) as
-      | { name?: unknown }
+      | {
+          name?: unknown;
+          allow_member_invites?: unknown;
+          max_members?: unknown;
+        }
       | null;
-    const rawName = body?.name;
 
-    if (typeof rawName !== "string") {
-      return NextResponse.json(
-        { error: "'name' must be a string" },
-        { status: 400 },
-      );
+    const updates: Record<string, unknown> = {};
+
+    if (body?.name !== undefined) {
+      if (typeof body.name !== "string") {
+        return NextResponse.json(
+          { error: "'name' must be a string" },
+          { status: 400 },
+        );
+      }
+      const name = body.name.trim();
+      if (name.length === 0) {
+        return NextResponse.json(
+          { error: "Account name cannot be empty" },
+          { status: 400 },
+        );
+      }
+      if (name.length > MAX_NAME_LEN) {
+        return NextResponse.json(
+          { error: `Account name must be ${MAX_NAME_LEN} characters or fewer` },
+          { status: 400 },
+        );
+      }
+      updates.name = name;
     }
 
-    const name = rawName.trim();
-    if (name.length === 0) {
-      return NextResponse.json(
-        { error: "Account name cannot be empty" },
-        { status: 400 },
-      );
+    if (body?.allow_member_invites !== undefined) {
+      if (typeof body.allow_member_invites !== "boolean") {
+        return NextResponse.json(
+          { error: "'allow_member_invites' must be a boolean" },
+          { status: 400 },
+        );
+      }
+      updates.allow_member_invites = body.allow_member_invites;
     }
-    if (name.length > MAX_NAME_LEN) {
+
+    if (body?.max_members !== undefined) {
+      if (body.max_members !== null && (typeof body.max_members !== "number" || body.max_members < 1)) {
+        return NextResponse.json(
+          { error: "'max_members' must be a positive integer or null" },
+          { status: 400 },
+        );
+      }
+      updates.max_members = body.max_members;
+    }
+
+    if (Object.keys(updates).length === 0) {
       return NextResponse.json(
-        { error: `Account name must be ${MAX_NAME_LEN} characters or fewer` },
+        { error: "No valid fields provided for update" },
         { status: 400 },
       );
     }
@@ -83,9 +117,9 @@ export async function PATCH(request: Request) {
     // guaranteed the caller is admin+.
     const { data, error } = await ctx.supabase
       .from("accounts")
-      .update({ name })
+      .update(updates)
       .eq("id", ctx.accountId)
-      .select("id, name")
+      .select("id, name, default_currency, allow_member_invites, max_members")
       .single();
 
     if (error) {

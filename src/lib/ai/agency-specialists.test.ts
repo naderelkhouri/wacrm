@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
   ALL_AGENCY_SPECIALISTS,
-  AGENCY_SPECIALISTS,
   getAgencySpecialist,
 } from './agency-specialists'
 import { buildSystemPrompt } from './defaults'
