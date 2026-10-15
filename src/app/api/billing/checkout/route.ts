@@ -51,7 +51,13 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     const customerName = body.customerName || userProfile?.full_name || ctx.account.name || 'Cliente WACRM';
-    const customerEmail = userProfile?.email || 'contato@wcloudapi.dev';
+    let customerEmail = userProfile?.email || 'contato@wcloudapi.dev';
+
+    // PagBank sandbox rejects orders where buyer email is identical to the merchant account email
+    const merchantEmail = process.env.PAGSEGURO_MERCHANT_EMAIL || 'progredindosempre@gmail.com';
+    if (process.env.PAGSEGURO_ENV === 'sandbox' && customerEmail.toLowerCase() === merchantEmail.toLowerCase()) {
+      customerEmail = customerEmail.replace('@', '+comprador@');
+    }
 
     // 3. Create Pix Order via PagBank
     const order = await pagseguroClient.createPixOrder({
