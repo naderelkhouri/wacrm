@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireRole, toErrorResponse } from "@/lib/auth/account";
+import { requireSuperAdmin } from "@/lib/auth/super-admin";
+import { toErrorResponse } from "@/lib/auth/account";
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -14,7 +15,7 @@ function isValidSignupMode(mode: unknown): mode is SignupMode {
 
 export async function GET() {
   try {
-    const ctx = await requireRole("owner");
+    const { supabaseAdmin } = await requireSuperAdmin();
 
     const envMode = (
       process.env.SIGNUP_MODE || process.env.NEXT_PUBLIC_SIGNUP_MODE
@@ -29,7 +30,7 @@ export async function GET() {
       source = "env";
       lockedByEnv = true;
     } else {
-      const { data, error } = await ctx.supabase
+      const { data, error } = await supabaseAdmin
         .from("platform_settings")
         .select("value, updated_at, updated_by")
         .eq("key", "signup_mode")
@@ -57,10 +58,10 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   try {
-    const ctx = await requireRole("owner");
+    const { user, supabaseAdmin } = await requireSuperAdmin();
 
     const limit = checkRateLimit(
-      `admin:platformSettings:${ctx.userId}`,
+      `admin:platformSettings:${user.id}`,
       RATE_LIMITS.adminAction,
     );
     if (!limit.success) return rateLimitResponse(limit);
@@ -91,14 +92,14 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const { error } = await ctx.supabase
+    const { error } = await supabaseAdmin
       .from("platform_settings")
       .upsert(
         {
           key: "signup_mode",
           value: { mode },
           updated_at: new Date().toISOString(),
-          updated_by: ctx.userId,
+          updated_by: user.id,
         },
         { onConflict: "key" },
       );

@@ -1,12 +1,15 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  requireRole: vi.fn(),
+  requireSuperAdmin: vi.fn(),
   checkRateLimit: vi.fn(() => ({ success: true })),
 }));
 
+vi.mock("@/lib/auth/super-admin", () => ({
+  requireSuperAdmin: mocks.requireSuperAdmin,
+}));
+
 vi.mock("@/lib/auth/account", () => ({
-  requireRole: mocks.requireRole,
   toErrorResponse: vi.fn((err) =>
     Response.json({ error: (err as Error).message }, { status: 500 }),
   ),
@@ -25,7 +28,7 @@ describe("/api/admin/platform-settings", () => {
 
   beforeEach(() => {
     delete process.env.SIGNUP_MODE;
-    mocks.requireRole.mockReset();
+    mocks.requireSuperAdmin.mockReset();
     mocks.checkRateLimit.mockReturnValue({ success: true });
   });
 
@@ -45,11 +48,10 @@ describe("/api/admin/platform-settings", () => {
       }),
     };
 
-    mocks.requireRole.mockResolvedValue({
-      userId: "owner-1",
-      accountId: "acc-1",
-      role: "owner",
-      supabase: mockSupabase,
+    mocks.requireSuperAdmin.mockResolvedValue({
+      user: { id: "owner-1", email: "admin@admx.tech" },
+      profile: { user_id: "owner-1", is_super_admin: true },
+      supabaseAdmin: mockSupabase,
     });
 
     const res = await GET();
@@ -68,11 +70,10 @@ describe("/api/admin/platform-settings", () => {
       }),
     };
 
-    mocks.requireRole.mockResolvedValue({
-      userId: "owner-1",
-      accountId: "acc-1",
-      role: "owner",
-      supabase: mockSupabase,
+    mocks.requireSuperAdmin.mockResolvedValue({
+      user: { id: "owner-1", email: "admin@admx.tech" },
+      profile: { user_id: "owner-1", is_super_admin: true },
+      supabaseAdmin: mockSupabase,
     });
 
     const request = new Request("http://localhost:3000/api/admin/platform-settings", {
@@ -98,11 +99,10 @@ describe("/api/admin/platform-settings", () => {
   });
 
   it("PATCH rejects invalid mode values", async () => {
-    mocks.requireRole.mockResolvedValue({
-      userId: "owner-1",
-      accountId: "acc-1",
-      role: "owner",
-      supabase: {},
+    mocks.requireSuperAdmin.mockResolvedValue({
+      user: { id: "owner-1", email: "admin@admx.tech" },
+      profile: { user_id: "owner-1", is_super_admin: true },
+      supabaseAdmin: {},
     });
 
     const request = new Request("http://localhost:3000/api/admin/platform-settings", {
@@ -118,11 +118,10 @@ describe("/api/admin/platform-settings", () => {
   it("PATCH rejects changes when mode is locked by environment variable", async () => {
     process.env.SIGNUP_MODE = "closed";
 
-    mocks.requireRole.mockResolvedValue({
-      userId: "owner-1",
-      accountId: "acc-1",
-      role: "owner",
-      supabase: {},
+    mocks.requireSuperAdmin.mockResolvedValue({
+      user: { id: "owner-1", email: "admin@admx.tech" },
+      profile: { user_id: "owner-1", is_super_admin: true },
+      supabaseAdmin: {},
     });
 
     const request = new Request("http://localhost:3000/api/admin/platform-settings", {

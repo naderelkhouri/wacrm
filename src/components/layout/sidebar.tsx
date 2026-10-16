@@ -18,6 +18,7 @@ import {
   Radio,
   Settings,
   Shield,
+  ShieldAlert,
   User,
   UserCog,
   Users,
@@ -116,7 +117,7 @@ import { useTranslations } from "next-intl";
 export function Sidebar({ open = false, onClose }: SidebarProps) {
   const t = useTranslations("Sidebar");
   const pathname = usePathname();
-  const { profile, profileLoading, account, accountRole, signOut } = useAuth();
+  const { profile, profileLoading, account, accountRole, isSuperAdmin, signOut } = useAuth();
   const totalUnread = useTotalUnread();
   const unreadNotifications = useUnreadNotifications();
   // Only surface the account-name strip when it actually carries
@@ -290,6 +291,22 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                 </li>
               );
             })}
+            {isSuperAdmin && (
+              <li>
+                <Link
+                  href="/admin"
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors lg:py-2",
+                    pathname.startsWith("/admin")
+                      ? "bg-amber-500/15 text-amber-500 border border-amber-500/30"
+                      : "text-amber-500/90 hover:bg-amber-500/10 hover:text-amber-400",
+                  )}
+                >
+                  <ShieldAlert className="h-4 w-4 text-amber-500" />
+                  <span>Área Master</span>
+                </Link>
+              </li>
+            )}
           </ul>
         </nav>
 
@@ -384,6 +401,20 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                 <Settings className="size-4" />
                 {t("menuSettings")}
               </DropdownMenuItem>
+              {isSuperAdmin && (
+                <DropdownMenuItem
+                  render={
+                    <Link
+                      href="/admin"
+                      onClick={onClose}
+                      className="text-amber-500 font-semibold focus:bg-amber-500/10 focus:text-amber-400"
+                    />
+                  }
+                >
+                  <ShieldAlert className="size-4 text-amber-500" />
+                  Área Master
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator className="bg-border" />
               <DropdownMenuItem
                 onClick={signOut}
