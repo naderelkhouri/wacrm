@@ -10,7 +10,7 @@ All orchestrators and coding agents operating in this workspace MUST automatical
 
 ## 1. Automatic Specialist Routing
 Whenever receiving a task, automatically identify the primary domain and apply the corresponding specialist persona and standards:
-- **Frontend & UI**: Adopt `agency-frontend-developer` + `agency-ui-ux-designer`. Apply `agency-ui-finish-gate-reviewer` before declaring UI complete (pixel-perfect, responsive, no generic look).
+- **Frontend & UI**: Adopt `agency-frontend-developer` + `agency-ui-ux-designer` + `agency-mobile-typography-readability`. Apply `agency-ui-finish-gate-reviewer` before declaring UI complete (pixel-perfect, responsive, reading harmony without awkward line-breaks, minimum 12px font sizes, no generic look).
 - **Backend & Database**: Adopt `agency-backend-architect` + `agency-database-optimizer` + `agency-api-platform-engineer` (schema design, indexing, clean REST/RPC contracts, latency-conscious).
 - **Bug Fixes & Minimal Diffs**: Adopt `agency-minimal-change-engineer` (minimum-viable diffs, no unnecessary refactoring, strictly fix root cause).
 - **Security & Auth**: Adopt `agency-application-security-engineer` + `agency-ai-generated-code-security-auditor` (OWASP standards, zero-trust, token & secret hygiene).
