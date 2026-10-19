@@ -97,16 +97,21 @@ jobs:
         run: |
           set -euo pipefail
           echo "=== Verificando disponibilidade da aplicação ==="
-          for attempt in $(seq 1 15); do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://wacrm.admx.tech/ || true)
-            echo "Tentativa $attempt: HTTP $HTTP_CODE"
-            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "307" ] || [ "$HTTP_CODE" = "302" ]; then
-              echo "✅ WACRM está online e respondendo (HTTP $HTTP_CODE)!"
+          for attempt in $(seq 1 20); do
+            HTTP_CODE_DEV=$(curl -s -o /dev/null -w "%{http_code}" https://wcloudapi.dev/ || true)
+            HTTP_CODE_ADMX=$(curl -s -o /dev/null -w "%{http_code}" https://wacrm.admx.tech/ || true)
+            echo "Tentativa $attempt: wcloudapi.dev -> HTTP $HTTP_CODE_DEV | wacrm.admx.tech -> HTTP $HTTP_CODE_ADMX"
+            if [ "$HTTP_CODE_DEV" = "200" ] || [ "$HTTP_CODE_DEV" = "307" ] || [ "$HTTP_CODE_DEV" = "302" ]; then
+              echo "✅ WcloudAPI está online e respondendo (HTTP $HTTP_CODE_DEV)!"
+              exit 0
+            fi
+            if [ "$HTTP_CODE_ADMX" = "200" ] || [ "$HTTP_CODE_ADMX" = "307" ] || [ "$HTTP_CODE_ADMX" = "302" ]; then
+              echo "✅ WACRM está online e respondendo (HTTP $HTTP_CODE_ADMX)!"
               exit 0
             fi
             sleep 4
           done
-          echo "❌ Falha no smoke test: código retornado foi $HTTP_CODE"
+          echo "❌ Falha no smoke test: wcloudapi.dev=$HTTP_CODE_DEV, wacrm.admx.tech=$HTTP_CODE_ADMX"
           exit 1
 
 

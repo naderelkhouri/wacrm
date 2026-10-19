@@ -16,7 +16,7 @@ COPY . .
 
 # Build-time environment variables with production defaults
 ARG NEXT_PUBLIC_SUPABASE_URL="https://api-db.admx.tech"
-ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=""
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzg1NTM1NDI2LCJleHAiOjIxMDA4OTU0MjZ9.azgQJhy7QawNIwjg_dUqWwsX3KefX8jkgTOTGRtGbM8"
 ARG NEXT_PUBLIC_SITE_URL="https://wcloudapi.dev"
 ARG NEXT_PUBLIC_APP_LOCALE="pt-BR"
 ARG NEXT_PUBLIC_DJANGO_API_URL="https://api-crm.admx.tech"
