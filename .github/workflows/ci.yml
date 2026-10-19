@@ -83,7 +83,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "Compilando imagem Docker wacrm:latest..."
-          sudo docker build --memory="1800m" --cpus="2" -t wacrm:latest -f /root/stacks/wacrm/Dockerfile /root/stacks/wacrm
+          sudo docker build -t wacrm:latest -f /root/stacks/wacrm/Dockerfile /root/stacks/wacrm
 
       - name: Update Swarm service
         run: |
