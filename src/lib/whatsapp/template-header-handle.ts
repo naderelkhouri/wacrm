@@ -33,6 +33,29 @@ export async function ensureImageHeaderHandle(
     )
   }
 
+  // SSRF guard: ensure media URL is public and not targeting local/internal networks
+  try {
+    const parsed = new URL(payload.header_media_url)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error()
+    }
+    const host = parsed.hostname.toLowerCase()
+    if (
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '0.0.0.0' ||
+      host === '::1' ||
+      host === '169.254.169.254' ||
+      host.endsWith('.internal') ||
+      host.endsWith('.local') ||
+      /^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(host)
+    ) {
+      throw new Error()
+    }
+  } catch {
+    throw new Error('Header image URL is invalid or targets a restricted private address.')
+  }
+
   // Fetch the sample image bytes (works for our uploaded chat-media URL
   // and for a manually-pasted public link).
   let res: Response

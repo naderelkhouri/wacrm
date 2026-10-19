@@ -65,6 +65,7 @@ const SECURITY_HEADERS = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  poweredByHeader: false,
   /**
    * Cross-origin dev access (Next.js 16).
    *

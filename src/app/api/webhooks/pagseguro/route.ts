@@ -6,6 +6,7 @@
 // Strict idempotency via payment_transactions.gateway_reference_id.
 // ============================================================
 
+import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
 import type { PagSeguroWebhookEvent } from '@/lib/payments/pagseguro/types';
@@ -23,12 +24,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
-    // Optional webhook secret check if configured
+    // Webhook authentication (fail-closed in production)
     const configuredSecret = process.env.PAGSEGURO_WEBHOOK_SECRET;
-    if (configuredSecret) {
+    if (!configuredSecret) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('[pagseguro-webhook] PAGSEGURO_WEBHOOK_SECRET is not configured in production — rejecting request.');
+        return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 });
+      }
+      console.warn('[pagseguro-webhook] WARNING: PAGSEGURO_WEBHOOK_SECRET not set in non-production environment.');
+    } else {
       const authHeader = request.headers.get('authorization') || request.headers.get('x-authenticity-token');
-      const token = authHeader?.replace(/^Bearer\s+/i, '').trim();
-      if (!token || token !== configuredSecret) {
+      const token = authHeader?.replace(/^Bearer\s+/i, '').trim() || '';
+      const suppliedBuf = Buffer.from(token);
+      const expectedBuf = Buffer.from(configuredSecret);
+      const isValid =
+        suppliedBuf.length === expectedBuf.length &&
+        timingSafeEqual(suppliedBuf, expectedBuf);
+      if (!isValid) {
         console.warn('[pagseguro-webhook] Unauthorized webhook attempt');
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       }
