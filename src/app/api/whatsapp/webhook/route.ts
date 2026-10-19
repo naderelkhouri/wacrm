@@ -131,6 +131,26 @@ export async function GET(request: Request) {
       }
     }
 
+    if (!matchedConfig) {
+      const { data: globalRow } = await supabaseAdmin()
+        .from('platform_settings')
+        .select('value')
+        .eq('key', 'global_whatsapp_config')
+        .maybeSingle()
+
+      const globalVal = (globalRow?.value as Record<string, unknown>) || {}
+      if (globalVal.encrypted_verify_token) {
+        try {
+          if (decrypt(globalVal.encrypted_verify_token as string) === verifyToken) {
+            return new Response(challenge, {
+              status: 200,
+              headers: { 'Content-Type': 'text/plain' },
+            })
+          }
+        } catch {}
+      }
+    }
+
     if (matchedConfig) {
       // Fire-and-forget GCM upgrade. Safe to run on every subscribe
       // since it's a no-op once the column is already GCM.

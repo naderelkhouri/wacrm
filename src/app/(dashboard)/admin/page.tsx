@@ -56,6 +56,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { AdminGlobalWhatsAppPanel } from "@/components/admin/admin-global-whatsapp-panel";
 
 interface OverviewMetrics {
   total_tenants: number;
@@ -468,6 +469,10 @@ export default function AdminPage() {
             <CreditCard className="h-4 w-4" />
             Transações PagBank ({transactions.length})
           </TabsTrigger>
+          <TabsTrigger value="global-whatsapp" className="gap-2">
+            <Radio className="h-4 w-4 text-emerald-500" />
+            Conexão WhatsApp Global
+          </TabsTrigger>
           <TabsTrigger value="governance" className="gap-2">
             <Settings className="h-4 w-4" />
             Governança da Plataforma
@@ -845,6 +850,11 @@ export default function AdminPage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Tab 4: Global WhatsApp Connection */}
+        <TabsContent value="global-whatsapp" className="space-y-4">
+          <AdminGlobalWhatsAppPanel />
         </TabsContent>
       </Tabs>
 

@@ -247,14 +247,36 @@ export async function sendMessageToConversation(
     );
   }
 
-  // WhatsApp config, account-scoped.
-  const { data: config, error: configError } = await db
+  // WhatsApp config, account-scoped with global platform fallback
+  let { data: config } = await db
     .from('whatsapp_config')
     .select('*')
     .eq('account_id', accountId)
-    .single();
+    .maybeSingle();
 
-  if (configError || !config) {
+  if (!config) {
+    // Check if the platform has a global WhatsApp connection configured with tenant fallback enabled
+    const { data: globalRow } = await db
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'global_whatsapp_config')
+      .maybeSingle();
+
+    const globalVal = (globalRow?.value as Record<string, unknown>) || {};
+    if (globalVal.phone_number_id && globalVal.encrypted_access_token && globalVal.allow_tenant_fallback) {
+      config = {
+        id: 'global',
+        account_id: accountId,
+        phone_number_id: globalVal.phone_number_id as string,
+        waba_id: (globalVal.waba_id as string) || null,
+        access_token: globalVal.encrypted_access_token as string,
+        verify_token: (globalVal.encrypted_verify_token as string) || null,
+        status: 'connected',
+      };
+    }
+  }
+
+  if (!config) {
     throw new SendMessageError(
       'whatsapp_not_configured',
       'WhatsApp not configured. Please set up your WhatsApp integration first.',
@@ -265,7 +287,7 @@ export async function sendMessageToConversation(
   const accessToken = decrypt(config.access_token);
 
   // Self-heal legacy CBC ciphertexts. Fire-and-forget; idempotent.
-  if (isLegacyFormat(config.access_token)) {
+  if (config.id !== 'global' && isLegacyFormat(config.access_token)) {
     void db
       .from('whatsapp_config')
       .update({ access_token: encrypt(accessToken) })

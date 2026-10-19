@@ -100,6 +100,27 @@ export async function GET() {
     }
 
     if (!config) {
+      // Check if global platform WhatsApp connection exists and has fallback enabled
+      const { data: globalRow } = await supabase
+        .from('platform_settings')
+        .select('value')
+        .eq('key', 'global_whatsapp_config')
+        .maybeSingle()
+
+      const globalVal = (globalRow?.value as Record<string, unknown>) || {}
+      if (globalVal.phone_number_id && globalVal.encrypted_access_token && globalVal.allow_tenant_fallback) {
+        return NextResponse.json(
+          {
+            connected: true,
+            using_global: true,
+            phone_number_id: globalVal.phone_number_id,
+            phone_info: globalVal.phone_info || null,
+            message: 'Esta organização está utilizando a Conexão WhatsApp Global da plataforma.',
+          },
+          { status: 200 },
+        )
+      }
+
       return NextResponse.json(
         {
           connected: false,

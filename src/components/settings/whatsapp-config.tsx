@@ -210,9 +210,22 @@ export function WhatsAppConfig() {
           setConnectionStatus('disconnected');
         }
       } else {
-        setConnectionStatus('disconnected');
-        setResetReason(null);
-        setStatusMessage('');
+        try {
+          const res = await fetch('/api/whatsapp/config', { method: 'GET' });
+          const payload = await res.json();
+          if (payload.connected && payload.using_global) {
+            setConnectionStatus('connected');
+            setStatusMessage(payload.message || 'Usando Conexão WhatsApp Global da Plataforma');
+          } else {
+            setConnectionStatus('disconnected');
+            setResetReason(null);
+            setStatusMessage('');
+          }
+        } catch {
+          setConnectionStatus('disconnected');
+          setResetReason(null);
+          setStatusMessage('');
+        }
       }
     } catch (err) {
       console.error('fetchConfig error:', err);
