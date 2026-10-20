@@ -13,6 +13,7 @@ import {
   handleTemplateWebhookChange,
   isTemplateWebhookField,
 } from '@/lib/whatsapp/template-webhook'
+import { recordTelemetryEvent } from '@/lib/telemetry/telemetry-service'
 
 // The `after()` callback in POST runs within this route's max duration.
 // Inbound processing can fan out to per-media Meta verification calls, so
@@ -200,8 +201,21 @@ export async function POST(request: Request) {
     // loudly if a misconfiguration causes signatures to stop matching,
     // rather than silently eating events.
     console.warn('[webhook] rejected request with invalid signature')
+    recordTelemetryEvent({
+      category: 'webhook_error',
+      metric_name: 'whatsapp.webhook.signature_invalid',
+      severity: 'critical',
+      value: 1,
+    })
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
   }
+
+  recordTelemetryEvent({
+    category: 'webhook_inbound',
+    metric_name: 'whatsapp.webhook.received',
+    severity: 'info',
+    value: rawBody.length,
+  })
 
   let body: { entry?: WhatsAppWebhookEntry[] }
   try {
