@@ -275,6 +275,8 @@ function resolveTargetService(actionType: RemediationAction['action_type']): str
   }
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Asynchronously persist remediation record into Supabase system_remediation_actions.
  */
@@ -283,6 +285,11 @@ async function persistRemediationAsync(action: RemediationAction): Promise<void>
 
   try {
     const admin = supabaseAdmin();
+    const validExecutedBy =
+      action.executed_by && UUID_REGEX.test(action.executed_by)
+        ? action.executed_by
+        : null;
+
     await admin.from('system_remediation_actions').insert({
       trigger_type: action.trigger_type,
       action_type: action.action_type,
@@ -290,7 +297,7 @@ async function persistRemediationAsync(action: RemediationAction): Promise<void>
       target_service: action.target_service,
       reason: action.reason,
       execution_log: action.execution_log || {},
-      executed_by: action.executed_by || null,
+      executed_by: validExecutedBy,
       completed_at: action.completed_at || null,
     });
   } catch {

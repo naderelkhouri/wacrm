@@ -272,10 +272,23 @@ export function getTelemetryMetricsSnapshot(): TelemetryMetricsSnapshot {
   else if (healthIndex < 85) status = 'degraded';
 
   // System memory stats (safe Node.js process inspection)
-  const mem = process.memoryUsage ? process.memoryUsage() : { heapUsed: 0, heapTotal: 0 };
-  const memoryUsedMb = Math.round((mem.heapUsed || 0) / (1024 * 1024));
-  const memoryTotalMb = Math.round((mem.heapTotal || 0) / (1024 * 1024)) || 1200;
-  const memoryPercent = Math.min(100, Math.round((memoryUsedMb / memoryTotalMb) * 100));
+  let memoryUsedMb = 0;
+  let memoryTotalMb = 1200;
+  let memoryPercent = 0;
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const v8 = require('v8');
+    const stats = v8.getHeapStatistics();
+    memoryUsedMb = Math.round(stats.used_heap_size / (1024 * 1024));
+    memoryTotalMb = Math.round(stats.heap_size_limit / (1024 * 1024)) || 1200;
+    memoryPercent = Math.min(100, Math.round((memoryUsedMb / memoryTotalMb) * 100));
+  } catch {
+    const mem = process.memoryUsage ? process.memoryUsage() : { heapUsed: 0, heapTotal: 0 };
+    memoryUsedMb = Math.round((mem.heapUsed || 0) / (1024 * 1024));
+    memoryTotalMb = Math.round((mem.heapTotal || 0) / (1024 * 1024)) || 1200;
+    memoryPercent = Math.min(100, Math.round((memoryUsedMb / memoryTotalMb) * 100));
+  }
 
   return {
     health_index: healthIndex,
