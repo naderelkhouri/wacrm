@@ -44,6 +44,7 @@ import {
 } from '@/lib/whatsapp/phone-utils';
 import type { MessageTemplate } from '@/types';
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard';
+import { recordTelemetryEvent } from '@/lib/telemetry/telemetry-service';
 
 export const MEDIA_KINDS = ['image', 'video', 'document', 'audio'] as const;
 export const VALID_MESSAGE_TYPES = [
@@ -422,6 +423,7 @@ export async function sendMessageToConversation(
   // back to the contact so the next send goes straight through.
   let waMessageId = '';
   let workingPhone = sanitizedPhone;
+  const sendStart = Date.now();
   try {
     const variants = phoneVariants(sanitizedPhone);
     let lastError: unknown = null;
@@ -445,7 +447,24 @@ export async function sendMessageToConversation(
     }
 
     if (lastError) throw lastError;
+
+    recordTelemetryEvent({
+      category: 'meta_api',
+      metric_name: 'meta.message.sent',
+      severity: 'info',
+      value: Date.now() - sendStart,
+      account_id: accountId,
+      metadata: { messageType },
+    });
   } catch (err) {
+    recordTelemetryEvent({
+      category: 'meta_api',
+      metric_name: 'meta.message.failed',
+      severity: 'warning',
+      value: Date.now() - sendStart,
+      account_id: accountId,
+      metadata: { messageType, error: err instanceof Error ? err.message : String(err) },
+    });
     const message =
       err instanceof Error ? err.message : 'Unknown Meta API error';
     console.error('[send-message] Meta send failed for all variants:', message);

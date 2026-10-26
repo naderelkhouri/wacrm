@@ -14,7 +14,16 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
-    const { user } = await requireSuperAdmin();
+    const authHeader = request.headers.get('authorization');
+    const cronSecret = process.env.AUTOMATION_CRON_SECRET;
+    let executorId: string | null = null;
+
+    if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+      executorId = 'system';
+    } else {
+      const { user } = await requireSuperAdmin();
+      executorId = user.id;
+    }
 
     const body = await request.json().catch(() => ({}));
     const { recommendation_id } = body;
@@ -26,7 +35,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await applyRecommendation(recommendation_id, user.id);
+    const result = await applyRecommendation(recommendation_id, executorId);
 
     return NextResponse.json({
       success: true,

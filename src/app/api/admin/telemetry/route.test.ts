@@ -109,4 +109,43 @@ describe('/api/admin/telemetry APIs', () => {
     expect(json.success).toBe(true);
     expect(json.data.status).toBe('applied');
   });
+
+  it('authorizes GET /api/admin/telemetry via Bearer AUTOMATION_CRON_SECRET', async () => {
+    process.env.AUTOMATION_CRON_SECRET = 'super_secret_cron_123';
+    mocks.requireSuperAdmin.mockRejectedValue(new Error('Unauthorized'));
+
+    const req = new Request('http://localhost/api/admin/telemetry', {
+      method: 'GET',
+      headers: { Authorization: 'Bearer super_secret_cron_123' },
+    });
+
+    const res = await GET(req);
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.data).toHaveProperty('snapshot');
+  });
+
+  it('authorizes POST /api/admin/telemetry/actions/execute via Bearer AUTOMATION_CRON_SECRET', async () => {
+    process.env.AUTOMATION_CRON_SECRET = 'super_secret_cron_123';
+    mocks.requireSuperAdmin.mockRejectedValue(new Error('Unauthorized'));
+
+    const req = new Request('http://localhost/api/admin/telemetry/actions/execute', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer super_secret_cron_123',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action_type: 'run_diagnostic_benchmark' }),
+    });
+
+    const res = await executePOST(req);
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.data.action_type).toBe('run_diagnostic_benchmark');
+    expect(json.data.trigger_type).toBe('automated');
+  });
 });

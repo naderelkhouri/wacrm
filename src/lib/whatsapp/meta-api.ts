@@ -29,12 +29,32 @@ interface MetaErrorResponse {
 
 async function throwMetaError(response: Response, fallback: string): Promise<never> {
   let message = fallback
+  let code: number | undefined
   try {
     const data = (await response.json()) as MetaErrorResponse
     if (data.error?.message) message = data.error.message
+    if (data.error?.code) code = data.error.code
   } catch {
     // response body wasn't JSON — keep the fallback
   }
+
+  try {
+    const { recordTelemetryEvent } = await import('@/lib/telemetry/telemetry-service')
+    recordTelemetryEvent({
+      category: 'meta_api',
+      metric_name: 'meta.api.http_error',
+      severity: response.status === 429 || code === 130429 ? 'critical' : 'warning',
+      value: response.status,
+      metadata: {
+        status: response.status,
+        code,
+        message: message.slice(0, 160),
+      },
+    })
+  } catch {
+    // Non-fatal telemetry failure
+  }
+
   throw new Error(message)
 }
 

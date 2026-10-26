@@ -19,9 +19,28 @@ import { getOptimizationRecommendations } from '@/lib/telemetry/recommendations-
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request?: Request) {
   try {
-    await requireSuperAdmin();
+    const authHeader = request?.headers?.get('authorization');
+    const cronSecret = process.env.AUTOMATION_CRON_SECRET;
+    let isAuthorized = false;
+
+    if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+      isAuthorized = true;
+    } else {
+      try {
+        await requireSuperAdmin();
+        isAuthorized = true;
+      } catch (authErr) {
+        if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+          throw authErr;
+        }
+      }
+    }
+
+    if (!isAuthorized) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const snapshot = getTelemetryMetricsSnapshot();
     const recentEvents = getRecentTelemetryEvents(50);

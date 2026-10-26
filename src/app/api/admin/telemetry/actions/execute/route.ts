@@ -24,7 +24,19 @@ const VALID_ACTIONS: RemediationAction['action_type'][] = [
 
 export async function POST(request: Request) {
   try {
-    const { user } = await requireSuperAdmin();
+    const authHeader = request.headers.get('authorization');
+    const cronSecret = process.env.AUTOMATION_CRON_SECRET;
+    let executorId: string | null = null;
+    let executorEmail = 'system_automation';
+
+    if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+      executorId = 'system';
+      executorEmail = 'automation_cron';
+    } else {
+      const { user } = await requireSuperAdmin();
+      executorId = user.id;
+      executorEmail = user.email || 'admin';
+    }
 
     const body = await request.json().catch(() => ({}));
     const { action_type, reason, dry_run = false } = body;
@@ -40,9 +52,9 @@ export async function POST(request: Request) {
 
     const remediation = await executeRemediation({
       action_type,
-      trigger_type: 'manual',
-      reason: reason || `Execução manual pelo administrador ${user.email}`,
-      executed_by: user.id,
+      trigger_type: executorId === 'system' ? 'automated' : 'manual',
+      reason: reason || `Execução pelo operador/serviço (${executorEmail})`,
+      executed_by: executorId,
       dry_run: Boolean(dry_run),
     });
 
