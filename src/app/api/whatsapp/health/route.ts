@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import { getWhatsAppHealthDetails } from '@/lib/whatsapp/meta-api'
+import { verifyUazapiInstance } from '@/lib/whatsapp/uazapi'
 
 /**
  * GET /api/whatsapp/health
@@ -40,7 +41,7 @@ export async function GET() {
     // Fetch config
     const { data: config, error: configError } = await supabase
       .from('whatsapp_config')
-      .select('phone_number_id, waba_id, access_token_encrypted, pin_encrypted, is_connected, updated_at')
+      .select('provider, api_url, instance_name, phone_number_id, waba_id, access_token, access_token_encrypted, pin_encrypted, status, updated_at')
       .eq('account_id', profile.account_id)
       .maybeSingle()
 
@@ -49,18 +50,19 @@ export async function GET() {
         {
           healthy: false,
           reason: 'no_config',
-          message: 'WhatsApp Cloud API is not configured yet for this account.',
+          message: 'WhatsApp API is not configured yet for this account.',
         },
         { status: 200 }
       )
     }
 
-    if (!config.access_token_encrypted || !config.phone_number_id || !config.waba_id) {
+    const rawEncryptedToken = (config.access_token || config.access_token_encrypted) as string | undefined
+    if (!rawEncryptedToken || !config.phone_number_id) {
       return NextResponse.json(
         {
           healthy: false,
           reason: 'incomplete_config',
-          message: 'Missing phone_number_id, waba_id or access_token.',
+          message: 'Missing phone_number_id or access_token.',
         },
         { status: 200 }
       )
@@ -68,13 +70,52 @@ export async function GET() {
 
     let accessToken: string
     try {
-      accessToken = decrypt(config.access_token_encrypted)
+      accessToken = decrypt(rawEncryptedToken)
     } catch {
       return NextResponse.json(
         {
           healthy: false,
           reason: 'token_corrupted',
           message: 'Decryption failed for stored access token.',
+        },
+        { status: 200 }
+      )
+    }
+
+    if (config.provider === 'uazapi' && config.api_url) {
+      const uazInfo = await verifyUazapiInstance({
+        apiUrl: config.api_url as string,
+        instanceToken: accessToken,
+        instanceName: (config.instance_name as string) || null,
+        fallbackPhoneId: config.phone_number_id,
+      })
+      const isConnected = uazInfo.quality_rating === 'GREEN'
+      return NextResponse.json({
+        healthy: isConnected,
+        provider: 'uazapi',
+        health: {
+          phone: {
+            id: uazInfo.id,
+            display_phone_number: uazInfo.display_phone_number,
+            verified_name: uazInfo.verified_name,
+            quality_rating: uazInfo.quality_rating,
+            status: isConnected ? 'CONNECTED' : 'DISCONNECTED',
+            state: uazInfo.state,
+          },
+          webhook: {
+            isSubscribed: true,
+          },
+        },
+        lastUpdated: config.updated_at,
+      })
+    }
+
+    if (!config.waba_id) {
+      return NextResponse.json(
+        {
+          healthy: false,
+          reason: 'incomplete_config',
+          message: 'Missing waba_id for Meta Cloud API.',
         },
         { status: 200 }
       )

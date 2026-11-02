@@ -266,9 +266,14 @@ export interface MessageReaction {
   created_at: string;
 }
 
+export type WhatsAppProvider = 'meta' | 'uazapi';
+
 export interface WhatsAppConfig {
   id: string;
   user_id: string;
+  provider?: WhatsAppProvider;
+  api_url?: string | null;
+  instance_name?: string | null;
   phone_number_id: string;
   waba_id?: string;
   access_token: string;

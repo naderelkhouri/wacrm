@@ -1,4 +1,8 @@
 import { sendTextMessage, sendTemplateMessage } from '@/lib/whatsapp/meta-api'
+import {
+  sendUazapiTextMessage,
+  sendUazapiTemplateMessage,
+} from '@/lib/whatsapp/uazapi'
 import type { InteractiveMessagePayload } from '@/lib/whatsapp/interactive'
 import {
   engineSendInteractiveButtons,
@@ -141,8 +145,32 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
   }
 
   const accessToken = decrypt(config.access_token)
+  const isUazapi = config.provider === 'uazapi' && Boolean(config.api_url)
 
   const attempt = async (phone: string): Promise<string> => {
+    if (isUazapi) {
+      const apiUrl = config.api_url as string
+      const instanceName = (config.instance_name as string) || null
+      if (input.kind === 'template') {
+        const r = await sendUazapiTemplateMessage({
+          apiUrl,
+          instanceToken: accessToken,
+          instanceName,
+          to: phone,
+          templateName: input.templateName,
+          params: input.params,
+        })
+        return r.messageId
+      }
+      const r = await sendUazapiTextMessage({
+        apiUrl,
+        instanceToken: accessToken,
+        instanceName,
+        to: phone,
+        text: input.text,
+      })
+      return r.messageId
+    }
     if (input.kind === 'template') {
       const r = await sendTemplateMessage({
         phoneNumberId: config.phone_number_id,

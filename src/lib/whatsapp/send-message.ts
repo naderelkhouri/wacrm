@@ -30,6 +30,13 @@ import {
   type MediaKind,
 } from '@/lib/whatsapp/meta-api';
 import {
+  sendUazapiTextMessage,
+  sendUazapiMediaMessage,
+  sendUazapiInteractiveButtons,
+  sendUazapiInteractiveList,
+  sendUazapiTemplateMessage,
+} from '@/lib/whatsapp/uazapi';
+import {
   validateInteractivePayload,
   interactivePayloadPreviewText,
   type InteractiveMessagePayload,
@@ -268,6 +275,9 @@ export async function sendMessageToConversation(
       config = {
         id: 'global',
         account_id: accountId,
+        provider: (globalVal.provider as string) || 'meta',
+        api_url: (globalVal.api_url as string) || null,
+        instance_name: (globalVal.instance_name as string) || null,
         phone_number_id: globalVal.phone_number_id as string,
         waba_id: (globalVal.waba_id as string) || null,
         access_token: globalVal.encrypted_access_token as string,
@@ -352,7 +362,81 @@ export async function sendMessageToConversation(
     templateRow = data ?? null;
   }
 
+  const isUazapi = config.provider === 'uazapi' && Boolean(config.api_url);
+
   const attempt = async (phone: string): Promise<string> => {
+    if (isUazapi) {
+      const apiUrl = config.api_url as string;
+      const instanceName = (config.instance_name as string) || null;
+      if (messageType === 'template') {
+        const result = await sendUazapiTemplateMessage({
+          apiUrl,
+          instanceToken: accessToken,
+          instanceName,
+          to: phone,
+          templateName: templateName!,
+          template: templateRow ?? undefined,
+          params: templateParams || [],
+          messageParams: templateMessageParams as never,
+          replyToMessageId: contextMessageId,
+        });
+        return result.messageId;
+      }
+      if (isMediaKind) {
+        const result = await sendUazapiMediaMessage({
+          apiUrl,
+          instanceToken: accessToken,
+          instanceName,
+          to: phone,
+          kind: messageType as MediaKind,
+          link: mediaUrl!,
+          caption: contentText || undefined,
+          filename: filename || undefined,
+          replyToMessageId: contextMessageId,
+        });
+        return result.messageId;
+      }
+      if (messageType === 'interactive') {
+        const p = interactivePayload!;
+        if (p.kind === 'buttons') {
+          const result = await sendUazapiInteractiveButtons({
+            apiUrl,
+            instanceToken: accessToken,
+            instanceName,
+            to: phone,
+            bodyText: p.body,
+            headerText: p.header || undefined,
+            footerText: p.footer || undefined,
+            buttons: p.buttons,
+            replyToMessageId: contextMessageId,
+          });
+          return result.messageId;
+        }
+        const result = await sendUazapiInteractiveList({
+          apiUrl,
+          instanceToken: accessToken,
+          instanceName,
+          to: phone,
+          bodyText: p.body,
+          buttonLabel: p.button_label,
+          headerText: p.header || undefined,
+          footerText: p.footer || undefined,
+          sections: p.sections,
+          replyToMessageId: contextMessageId,
+        });
+        return result.messageId;
+      }
+      const result = await sendUazapiTextMessage({
+        apiUrl,
+        instanceToken: accessToken,
+        instanceName,
+        to: phone,
+        text: contentText!,
+        replyToMessageId: contextMessageId,
+      });
+      return result.messageId;
+    }
+
     if (messageType === 'template') {
       const result = await sendTemplateMessage({
         phoneNumberId: config.phone_number_id,

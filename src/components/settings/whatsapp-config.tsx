@@ -69,6 +69,9 @@ export function WhatsAppConfig() {
   // again and overwrites whatever the user typed but hadn't saved yet.
   const loadedAccountIdRef = useRef<string | null>(null);
 
+  const [provider, setProvider] = useState<'meta' | 'uazapi'>('meta');
+  const [apiUrl, setApiUrl] = useState('');
+  const [instanceName, setInstanceName] = useState('');
   const [phoneNumberId, setPhoneNumberId] = useState('');
   const [wabaId, setWabaId] = useState('');
   const [accessToken, setAccessToken] = useState('');
@@ -172,6 +175,9 @@ export function WhatsAppConfig() {
 
       if (data) {
         setConfig(data);
+        setProvider(data.provider === 'uazapi' ? 'uazapi' : 'meta');
+        setApiUrl(data.api_url || '');
+        setInstanceName(data.instance_name || '');
         setPhoneNumberId(data.phone_number_id || '');
         setWabaId(data.waba_id || '');
         setAccessToken(MASKED_TOKEN);
@@ -180,6 +186,9 @@ export function WhatsAppConfig() {
         setTokenEdited(false);
       } else {
         setConfig(null);
+        setProvider('meta');
+        setApiUrl('');
+        setInstanceName('');
         setPhoneNumberId('');
         setWabaId('');
         setAccessToken('');
@@ -253,40 +262,46 @@ export function WhatsAppConfig() {
   }, [authLoading, profileLoading, user, accountId, fetchConfig]);
 
   async function handleSave() {
-    if (!phoneNumberId.trim()) {
+    if (provider === 'uazapi') {
+      if (!apiUrl.trim()) {
+        toast.error('A URL da API Uazapi é obrigatória');
+        return;
+      }
+    } else if (!phoneNumberId.trim()) {
       toast.error('Phone Number ID is required');
       return;
     }
+
     if (!config && (!accessToken.trim() || !tokenEdited)) {
-      toast.error('Access Token is required for initial setup');
+      toast.error(
+        provider === 'uazapi'
+          ? 'O Token da Instância Uazapi é obrigatório'
+          : 'Access Token is required for initial setup'
+      );
       return;
     }
 
     try {
       setSaving(true);
 
-      // Always POST through the API — it verifies with Meta and encrypts
-      // the access_token server-side with ENCRYPTION_KEY. Skipping this
-      // and writing direct to Supabase stores the token in plaintext,
-      // which then fails decryption on every subsequent health check.
       const payload: Record<string, unknown> = {
-        phone_number_id: phoneNumberId.trim(),
+        provider,
+        api_url: provider === 'uazapi' ? apiUrl.trim() : null,
+        instance_name: provider === 'uazapi' ? instanceName.trim() || null : null,
+        phone_number_id: phoneNumberId.trim() || null,
         waba_id: wabaId.trim() || null,
         verify_token: verifyToken.trim() || null,
-        // Optional — only sent when the user filled it in. The server
-        // requires it on first save or when changing numbers; for a
-        // simple token rotation, leaving it blank skips re-register.
         pin: pin.trim() || null,
       };
 
       if (tokenEdited && accessToken !== MASKED_TOKEN && accessToken.trim()) {
         payload.access_token = accessToken.trim();
       } else if (config) {
-        // Existing config — reuse stored encrypted token by decrypting on the
-        // server. But our POST handler requires an access_token to verify
-        // with Meta. If the user didn't change the token, we need to signal
-        // that. Simplest: require token re-entry if they're updating.
-        toast.error('Please re-enter the Access Token to save changes');
+        toast.error(
+          provider === 'uazapi'
+            ? 'Por segurança, insira novamente o Token da Instância Uazapi para salvar alterações'
+            : 'Please re-enter the Access Token to save changes'
+        );
         setSaving(false);
         return;
       }
@@ -629,36 +644,125 @@ export function WhatsAppConfig() {
           <CardHeader>
             <CardTitle className="text-foreground">{t('apiCredentialsTitle')}</CardTitle>
             <CardDescription className="text-muted-foreground">
-              {t('apiCredentialsDesc')}
+              Escolha o provedor da API do WhatsApp (Meta Cloud API Oficial ou Uazapi) e informe as credenciais da instância.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Provider Selector */}
             <div className="space-y-2">
-              <Label className="text-muted-foreground">{t('phoneNumberId')}</Label>
-              <Input
-                placeholder="e.g. 100234567890123"
-                value={phoneNumberId}
-                onChange={(e) => setPhoneNumberId(e.target.value)}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-              />
+              <Label className="text-muted-foreground">Provedor de API do WhatsApp</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setProvider('meta')}
+                  className={`flex flex-col items-start p-3 rounded-lg border text-left transition-all ${
+                    provider === 'meta'
+                      ? 'border-primary bg-primary/10 text-foreground'
+                      : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span className="font-semibold text-sm">Meta Cloud API (Oficial)</span>
+                    {provider === 'meta' && <CheckCircle2 className="size-4 text-primary" />}
+                  </div>
+                  <span className="text-xs text-muted-foreground mt-1">
+                    API oficial Graph API da Meta (WABA + Templates aprovados).
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setProvider('uazapi')}
+                  className={`flex flex-col items-start p-3 rounded-lg border text-left transition-all ${
+                    provider === 'uazapi'
+                      ? 'border-emerald-500 bg-emerald-500/10 text-foreground'
+                      : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span className="font-semibold text-sm">Uazapi (API WhatsApp Segura)</span>
+                    {provider === 'uazapi' && <CheckCircle2 className="size-4 text-emerald-500" />}
+                  </div>
+                  <span className="text-xs text-muted-foreground mt-1">
+                    Conexão direta de alta performance via Uazapi (QR Code / Instância).
+                  </span>
+                </button>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-muted-foreground">{t('wabaId')}</Label>
-              <Input
-                placeholder="e.g. 100234567890456"
-                value={wabaId}
-                onChange={(e) => setWabaId(e.target.value)}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-              />
-            </div>
+            {provider === 'uazapi' ? (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">URL do Servidor Uazapi *</Label>
+                  <Input
+                    placeholder="Ex: https://free.uazapi.com ou https://api.seudominio.com"
+                    value={apiUrl}
+                    onChange={(e) => setApiUrl(e.target.value)}
+                    className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    URL base do seu servidor Uazapi (sem barra no final).
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground">Nome da Instância (Opcional)</Label>
+                    <Input
+                      placeholder="Ex: comercial-principal"
+                      value={instanceName}
+                      onChange={(e) => setInstanceName(e.target.value)}
+                      className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground">Número WhatsApp / ID (Opcional)</Label>
+                    <Input
+                      placeholder="Ex: 5511999998888 (detectado automaticamente)"
+                      value={phoneNumberId}
+                      onChange={(e) => setPhoneNumberId(e.target.value)}
+                      className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">{t('phoneNumberId')}</Label>
+                  <Input
+                    placeholder="e.g. 100234567890123"
+                    value={phoneNumberId}
+                    onChange={(e) => setPhoneNumberId(e.target.value)}
+                    className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">{t('wabaId')}</Label>
+                  <Input
+                    placeholder="e.g. 100234567890456"
+                    value={wabaId}
+                    onChange={(e) => setWabaId(e.target.value)}
+                    className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                  />
+                </div>
+              </>
+            )}
 
             <div className="space-y-2">
-              <Label className="text-muted-foreground">{t('accessToken')}</Label>
+              <Label className="text-muted-foreground">
+                {provider === 'uazapi' ? 'Token da Instância Uazapi (token / apikey) *' : t('accessToken')}
+              </Label>
               <div className="relative">
                 <Input
                   type={showToken ? 'text' : 'password'}
-                  placeholder={t('accessTokenPlaceholder')}
+                  placeholder={
+                    provider === 'uazapi'
+                      ? 'Cole o token da sua instância Uazapi'
+                      : t('accessTokenPlaceholder')
+                  }
                   value={accessToken}
                   onChange={(e) => {
                     setAccessToken(e.target.value);
@@ -696,30 +800,34 @@ export function WhatsAppConfig() {
                 className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
               />
               <p className="text-xs text-muted-foreground">
-                {t('webhookVerifyTokenHint')}
+                {provider === 'uazapi'
+                  ? 'Opcional — Ao salvar, o WACRM configura automaticamente o Webhook na sua instância Uazapi.'
+                  : t('webhookVerifyTokenHint')}
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-muted-foreground">
-                {t('twoStepPin')}
-                <span className="ml-1 text-muted-foreground">{t('optional')}</span>
-              </Label>
-              <Input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                placeholder={t('pinPlaceholder')}
-                value={pin}
-                onChange={(e) =>
-                  setPin(e.target.value.replace(/\D/g, '').slice(0, 6))
-                }
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground tracking-widest"
-              />
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                <span dangerouslySetInnerHTML={{ __html: t.raw('pinHint') }} />
-              </p>
-            </div>
+            {provider === 'meta' && (
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">
+                  {t('twoStepPin')}
+                  <span className="ml-1 text-muted-foreground">{t('optional')}</span>
+                </Label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder={t('pinPlaceholder')}
+                  value={pin}
+                  onChange={(e) =>
+                    setPin(e.target.value.replace(/\D/g, '').slice(0, 6))
+                  }
+                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground tracking-widest"
+                />
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  <span dangerouslySetInnerHTML={{ __html: t.raw('pinHint') }} />
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 

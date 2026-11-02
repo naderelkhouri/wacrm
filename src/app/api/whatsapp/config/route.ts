@@ -6,6 +6,11 @@ import {
   subscribeWabaToApp,
   verifyPhoneNumber,
 } from '@/lib/whatsapp/meta-api'
+import {
+  verifyUazapiInstance,
+  configureUazapiWebhook,
+  normalizeUazapiBaseUrl,
+} from '@/lib/whatsapp/uazapi'
 import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
 
 /**
@@ -87,7 +92,7 @@ export async function GET() {
 
     const { data: config, error: configError } = await supabase
       .from('whatsapp_config')
-      .select('phone_number_id, access_token, status')
+      .select('provider, api_url, instance_name, phone_number_id, access_token, status')
       .eq('account_id', accountId)
       .maybeSingle()
 
@@ -113,6 +118,7 @@ export async function GET() {
           {
             connected: true,
             using_global: true,
+            provider: (globalVal.provider as string) || 'meta',
             phone_number_id: globalVal.phone_number_id,
             phone_info: globalVal.phone_info || null,
             message: 'Esta organização está utilizando a Conexão WhatsApp Global da plataforma.',
@@ -150,13 +156,43 @@ export async function GET() {
       )
     }
 
+    if (config.provider === 'uazapi' && config.api_url) {
+      try {
+        const phoneInfo = await verifyUazapiInstance({
+          apiUrl: config.api_url as string,
+          instanceToken: accessToken,
+          instanceName: (config.instance_name as string) || null,
+          fallbackPhoneId: config.phone_number_id,
+        })
+        return NextResponse.json({
+          connected: true,
+          provider: 'uazapi',
+          api_url: config.api_url,
+          instance_name: config.instance_name,
+          phone_info: phoneInfo,
+        })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown Uazapi error'
+        console.error('[whatsapp/config GET] Uazapi verification failed:', message)
+        return NextResponse.json(
+          {
+            connected: false,
+            provider: 'uazapi',
+            reason: 'meta_api_error',
+            message: `Uazapi API error: ${message}`,
+          },
+          { status: 200 }
+        )
+      }
+    }
+
     // Validate credentials against Meta
     try {
       const phoneInfo = await verifyPhoneNumber({
         phoneNumberId: config.phone_number_id,
         accessToken,
       })
-      return NextResponse.json({ connected: true, phone_info: phoneInfo })
+      return NextResponse.json({ connected: true, provider: 'meta', phone_info: phoneInfo })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown Meta API error'
       console.error('[whatsapp/config GET] Meta API verification failed:', message)
@@ -206,7 +242,149 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { phone_number_id, waba_id, access_token, verify_token, pin } = body
+    const {
+      provider: rawProvider,
+      api_url,
+      instance_name,
+      phone_number_id: rawPhoneNumberId,
+      waba_id,
+      access_token,
+      verify_token,
+      pin,
+    } = body
+
+    const provider = rawProvider === 'uazapi' ? 'uazapi' : 'meta'
+
+    if (provider === 'uazapi') {
+      if (!access_token || !api_url) {
+        return NextResponse.json(
+          { error: 'URL da API Uazapi e Token da Instância são obrigatórios.' },
+          { status: 400 }
+        )
+      }
+
+      let normalizedApiUrl: string
+      try {
+        normalizedApiUrl = normalizeUazapiBaseUrl(String(api_url))
+      } catch (err) {
+        return NextResponse.json(
+          { error: err instanceof Error ? err.message : 'URL da API Uazapi inválida' },
+          { status: 400 }
+        )
+      }
+
+      let phoneInfo
+      try {
+        phoneInfo = await verifyUazapiInstance({
+          apiUrl: normalizedApiUrl,
+          instanceToken: String(access_token).trim(),
+          instanceName: instance_name ? String(instance_name).trim() : null,
+          fallbackPhoneId: rawPhoneNumberId ? String(rawPhoneNumberId).trim() : null,
+        })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Falha na conexão com Uazapi'
+        return NextResponse.json({ error: message }, { status: 400 })
+      }
+
+      const resolvedPhoneNumberId =
+        (rawPhoneNumberId && String(rawPhoneNumberId).trim()) ||
+        phoneInfo.id ||
+        (instance_name && String(instance_name).trim()) ||
+        `uazapi_${accountId.slice(0, 8)}`
+
+      const { data: claimed } = await supabaseAdmin()
+        .from('whatsapp_config')
+        .select('account_id')
+        .eq('phone_number_id', resolvedPhoneNumberId)
+        .neq('account_id', accountId)
+        .maybeSingle()
+
+      if (claimed) {
+        return NextResponse.json(
+          {
+            error:
+              'Esta instância/número Uazapi já está vinculado a outra conta nesta plataforma.',
+          },
+          { status: 409 }
+        )
+      }
+
+      const tokenToVerifyWebhook =
+        (typeof verify_token === 'string' && verify_token.trim()) ||
+        String(access_token).trim()
+
+      const encryptedAccessToken = encrypt(String(access_token).trim())
+      const encryptedVerifyToken = encrypt(tokenToVerifyWebhook)
+
+      // Auto-configure webhook on the Uazapi instance (best-effort)
+      const appOrigin =
+        process.env.NEXT_PUBLIC_APP_URL ||
+        new URL(request.url).origin
+      const webhookUrl = `${appOrigin.replace(/\/+$/, '')}/api/whatsapp/webhook?token=${encodeURIComponent(tokenToVerifyWebhook)}`
+      await configureUazapiWebhook({
+        apiUrl: normalizedApiUrl,
+        instanceToken: String(access_token).trim(),
+        instanceName: instance_name ? String(instance_name).trim() : null,
+        webhookUrl,
+      })
+
+      const nowIso = new Date().toISOString()
+      const uazRow = {
+        provider: 'uazapi' as const,
+        api_url: normalizedApiUrl,
+        instance_name: instance_name ? String(instance_name).trim() : (phoneInfo.instance_name || null),
+        phone_number_id: resolvedPhoneNumberId,
+        waba_id: waba_id ? String(waba_id).trim() : 'uazapi',
+        access_token: encryptedAccessToken,
+        verify_token: encryptedVerifyToken,
+        status: 'connected' as const,
+        connected_at: nowIso,
+        registered_at: nowIso,
+        subscribed_apps_at: nowIso,
+        last_registration_error: null,
+        updated_at: nowIso,
+      }
+
+      const { data: existingUaz } = await supabase
+        .from('whatsapp_config')
+        .select('id')
+        .eq('account_id', accountId)
+        .maybeSingle()
+
+      if (existingUaz) {
+        const { error: updErr } = await supabase
+          .from('whatsapp_config')
+          .update(uazRow)
+          .eq('account_id', accountId)
+        if (updErr) {
+          console.error('Error updating Uazapi whatsapp_config:', updErr)
+          return NextResponse.json({ error: 'Failed to update Uazapi configuration' }, { status: 500 })
+        }
+      } else {
+        const { error: insErr } = await supabase
+          .from('whatsapp_config')
+          .insert({
+            account_id: accountId,
+            user_id: user.id,
+            ...uazRow,
+          })
+        if (insErr) {
+          console.error('Error inserting Uazapi whatsapp_config:', insErr)
+          return NextResponse.json({ error: 'Failed to save Uazapi configuration' }, { status: 500 })
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        saved: true,
+        provider: 'uazapi',
+        registered: true,
+        registration_skipped: false,
+        phone_info: phoneInfo,
+      })
+    }
+
+    const phone_number_id = rawPhoneNumberId
 
     if (!access_token || !phone_number_id) {
       return NextResponse.json(
@@ -375,6 +553,9 @@ export async function POST(request: Request) {
     // store the credentials and the error so the UI can guide the
     // user through a retry.
     const baseRow = {
+      provider: 'meta' as const,
+      api_url: null,
+      instance_name: null,
       phone_number_id,
       waba_id: waba_id || null,
       access_token: encryptedAccessToken,

@@ -6,9 +6,9 @@
 
 import { NextResponse } from 'next/server';
 import { requireSuperAdmin } from '@/lib/auth/super-admin';
-import { toErrorResponse } from '@/lib/auth/account';
 import { decrypt } from '@/lib/whatsapp/encryption';
 import { verifyPhoneNumber } from '@/lib/whatsapp/meta-api';
+import { verifyUazapiInstance } from '@/lib/whatsapp/uazapi';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,15 +17,21 @@ export async function POST(request: Request) {
     const { supabaseAdmin } = await requireSuperAdmin();
 
     const body = (await request.json().catch(() => ({}))) as {
+      provider?: 'meta' | 'uazapi';
+      api_url?: string;
+      instance_name?: string;
       phone_number_id?: string;
       access_token?: string;
     };
 
+    let provider = body.provider;
+    let apiUrl = body.api_url?.trim();
+    let instanceName = body.instance_name?.trim();
     let phoneNumberId = body.phone_number_id?.trim();
     let token = body.access_token?.trim();
 
     // If no credentials supplied or token masked, read existing saved global config
-    if (!phoneNumberId || !token || token === '••••••••••••••••') {
+    if (!token || token === '••••••••••••••••' || (!phoneNumberId && !apiUrl)) {
       const { data } = await supabaseAdmin
         .from('platform_settings')
         .select('value')
@@ -33,11 +39,37 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       const val = (data?.value as Record<string, unknown>) || {};
-      phoneNumberId = (val.phone_number_id as string) || phoneNumberId;
+      provider = provider || ((val.provider as 'meta' | 'uazapi') || 'meta');
+      apiUrl = apiUrl || (val.api_url as string) || '';
+      instanceName = instanceName || (val.instance_name as string) || '';
+      phoneNumberId = phoneNumberId || (val.phone_number_id as string) || '';
 
-      if (val.encrypted_access_token) {
+      if ((!token || token === '••••••••••••••••') && val.encrypted_access_token) {
         token = decrypt(val.encrypted_access_token as string);
       }
+    }
+
+    if (provider === 'uazapi') {
+      if (!apiUrl || !token) {
+        return NextResponse.json(
+          { error: 'URL da API Uazapi e Token da Instância são obrigatórios para teste.' },
+          { status: 400 }
+        );
+      }
+
+      const phoneInfo = await verifyUazapiInstance({
+        apiUrl,
+        instanceToken: token,
+        instanceName: instanceName || null,
+        fallbackPhoneId: phoneNumberId || null,
+      });
+
+      return NextResponse.json({
+        success: true,
+        provider: 'uazapi',
+        phone_info: phoneInfo,
+        message: `Conexão Uazapi bem sucedida com ${phoneInfo.display_phone_number} (${phoneInfo.verified_name || 'Uazapi'}). Status: ${phoneInfo.state || 'connected'}.`,
+      });
     }
 
     if (!phoneNumberId || !token) {
@@ -55,6 +87,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
+      provider: 'meta',
       phone_info: phoneInfo,
       message: `Conexão bem sucedida com o número ${phoneInfo.display_phone_number} (${phoneInfo.verified_name || 'Sem nome verificado'}). Qualidade: ${phoneInfo.quality_rating || 'N/A'}.`,
     });

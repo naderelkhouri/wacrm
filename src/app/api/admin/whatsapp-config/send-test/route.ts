@@ -6,9 +6,9 @@
 
 import { NextResponse } from 'next/server';
 import { requireSuperAdmin } from '@/lib/auth/super-admin';
-import { toErrorResponse } from '@/lib/auth/account';
 import { decrypt } from '@/lib/whatsapp/encryption';
 import { sendTextMessage } from '@/lib/whatsapp/meta-api';
+import { sendUazapiTextMessage } from '@/lib/whatsapp/uazapi';
 import { sanitizePhoneForMeta, isValidE164 } from '@/lib/whatsapp/phone-utils';
 
 export const dynamic = 'force-dynamic';
@@ -43,10 +43,13 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     const val = (data?.value as Record<string, unknown>) || {};
+    const provider = (val.provider as 'meta' | 'uazapi') || 'meta';
+    const apiUrl = val.api_url as string | undefined;
+    const instanceName = val.instance_name as string | undefined;
     const phoneNumberId = val.phone_number_id as string;
     const encryptedToken = val.encrypted_access_token as string;
 
-    if (!phoneNumberId || !encryptedToken) {
+    if ((!phoneNumberId && !apiUrl) || !encryptedToken) {
       return NextResponse.json(
         { error: 'A Conexão Global do WhatsApp ainda não foi salva e configurada.' },
         { status: 400 }
@@ -56,19 +59,29 @@ export async function POST(request: Request) {
     const token = decrypt(encryptedToken);
     const messageText =
       body.message?.trim() ||
-      `🚀 *WcloudAPI — Teste de Conexão Global*\n\nSeu número de WhatsApp está conectado com sucesso à plataforma!\n\n🕒 ${new Date().toLocaleString('pt-BR')}`;
+      `🚀 *WcloudAPI — Teste de Conexão Global (${provider === 'uazapi' ? 'Uazapi' : 'Meta Cloud API'})*\n\nSeu número de WhatsApp está conectado com sucesso à plataforma!\n\n🕒 ${new Date().toLocaleString('pt-BR')}`;
 
-    const result = await sendTextMessage({
-      phoneNumberId,
-      accessToken: token,
-      to: sanitizedPhone,
-      text: messageText,
-    });
+    const result =
+      provider === 'uazapi' && apiUrl
+        ? await sendUazapiTextMessage({
+            apiUrl,
+            instanceToken: token,
+            instanceName: instanceName || null,
+            to: sanitizedPhone,
+            text: messageText,
+          })
+        : await sendTextMessage({
+            phoneNumberId,
+            accessToken: token,
+            to: sanitizedPhone,
+            text: messageText,
+          });
 
     return NextResponse.json({
       success: true,
+      provider,
       message_id: result.messageId,
-      message: `Mensagem de teste enviada com sucesso para ${sanitizedPhone}!`,
+      message: `Mensagem de teste enviada com sucesso via ${provider === 'uazapi' ? 'Uazapi' : 'Meta Cloud API'} para ${sanitizedPhone}!`,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Falha no envio da mensagem';

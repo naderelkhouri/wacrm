@@ -19,6 +19,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { sendTemplateMessage } from '@/lib/whatsapp/meta-api';
+import { sendUazapiTemplateMessage } from '@/lib/whatsapp/uazapi';
 import { decrypt } from '@/lib/whatsapp/encryption';
 import {
   sanitizePhoneForMeta,
@@ -66,6 +67,9 @@ export interface BroadcastPlan {
   broadcastId: string;
   templateName: string;
   templateLanguage: string;
+  provider?: 'meta' | 'uazapi';
+  apiUrl?: string | null;
+  instanceName?: string | null;
   phoneNumberId: string;
   accessToken: string;
   templateRow: MessageTemplate | null;
@@ -238,6 +242,9 @@ export async function createBroadcast(
     broadcastId: broadcast.id,
     templateName,
     templateLanguage,
+    provider: config.provider === 'uazapi' ? 'uazapi' : 'meta',
+    apiUrl: (config.api_url as string) || null,
+    instanceName: (config.instance_name as string) || null,
     phoneNumberId: config.phone_number_id,
     accessToken,
     templateRow,
@@ -264,6 +271,7 @@ export async function deliverBroadcast(
   plan: BroadcastPlan
 ): Promise<void> {
   let sentCount = 0;
+  const isUazapi = plan.provider === 'uazapi' && Boolean(plan.apiUrl);
 
   for (const recipient of plan.planned) {
     const variants = phoneVariants(recipient.phone);
@@ -272,15 +280,25 @@ export async function deliverBroadcast(
 
     for (const variant of variants) {
       try {
-        const result = await sendTemplateMessage({
-          phoneNumberId: plan.phoneNumberId,
-          accessToken: plan.accessToken,
-          to: variant,
-          templateName: plan.templateName,
-          language: plan.templateLanguage,
-          template: plan.templateRow ?? undefined,
-          params: recipient.params,
-        });
+        const result = isUazapi
+          ? await sendUazapiTemplateMessage({
+              apiUrl: plan.apiUrl as string,
+              instanceToken: plan.accessToken,
+              instanceName: plan.instanceName,
+              to: variant,
+              templateName: plan.templateName,
+              template: plan.templateRow ?? undefined,
+              params: recipient.params,
+            })
+          : await sendTemplateMessage({
+              phoneNumberId: plan.phoneNumberId,
+              accessToken: plan.accessToken,
+              to: variant,
+              templateName: plan.templateName,
+              language: plan.templateLanguage,
+              template: plan.templateRow ?? undefined,
+              params: recipient.params,
+            });
         sentMessageId = result.messageId;
         lastError = null;
         break;

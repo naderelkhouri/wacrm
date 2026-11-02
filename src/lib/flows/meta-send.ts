@@ -7,6 +7,12 @@ import {
   type InteractiveListSection,
   type MediaKind,
 } from '@/lib/whatsapp/meta-api'
+import {
+  sendUazapiInteractiveButtons,
+  sendUazapiInteractiveList,
+  sendUazapiMediaMessage,
+  sendUazapiTextMessage,
+} from '@/lib/whatsapp/uazapi'
 import type { InteractiveMessagePayload } from '@/lib/whatsapp/interactive'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import {
@@ -92,8 +98,19 @@ export async function engineSendText(
   }
 
   const accessToken = decrypt(config.access_token)
+  const isUazapi = config.provider === 'uazapi' && Boolean(config.api_url)
 
   const attempt = async (phone: string): Promise<string> => {
+    if (isUazapi) {
+      const r = await sendUazapiTextMessage({
+        apiUrl: config.api_url as string,
+        instanceToken: accessToken,
+        instanceName: (config.instance_name as string) || null,
+        to: phone,
+        text: args.text,
+      })
+      return r.messageId
+    }
     const r = await sendTextMessage({
       phoneNumberId: config.phone_number_id,
       accessToken,
@@ -202,8 +219,22 @@ export async function engineSendMedia(
   }
 
   const accessToken = decrypt(config.access_token)
+  const isUazapi = config.provider === 'uazapi' && Boolean(config.api_url)
 
   const attempt = async (phone: string): Promise<string> => {
+    if (isUazapi) {
+      const r = await sendUazapiMediaMessage({
+        apiUrl: config.api_url as string,
+        instanceToken: accessToken,
+        instanceName: (config.instance_name as string) || null,
+        to: phone,
+        kind: args.kind,
+        link: args.link,
+        caption: args.caption,
+        filename: args.filename,
+      })
+      return r.messageId
+    }
     const r = await sendMediaMessage({
       phoneNumberId: config.phone_number_id,
       accessToken,
@@ -354,8 +385,38 @@ async function sendInteractiveViaMeta(
   }
 
   const accessToken = decrypt(config.access_token)
+  const isUazapi = config.provider === 'uazapi' && Boolean(config.api_url)
 
   const attempt = async (phone: string): Promise<string> => {
+    if (isUazapi) {
+      const apiUrl = config.api_url as string
+      const instanceName = (config.instance_name as string) || null
+      if (input.kind === 'buttons') {
+        const r = await sendUazapiInteractiveButtons({
+          apiUrl,
+          instanceToken: accessToken,
+          instanceName,
+          to: phone,
+          bodyText: input.bodyText,
+          buttons: input.buttons,
+          headerText: input.headerText,
+          footerText: input.footerText,
+        })
+        return r.messageId
+      }
+      const r = await sendUazapiInteractiveList({
+        apiUrl,
+        instanceToken: accessToken,
+        instanceName,
+        to: phone,
+        bodyText: input.bodyText,
+        buttonLabel: input.buttonLabel,
+        sections: input.sections,
+        headerText: input.headerText,
+        footerText: input.footerText,
+      })
+      return r.messageId
+    }
     if (input.kind === 'buttons') {
       const r = await sendInteractiveButtons({
         phoneNumberId: config.phone_number_id,

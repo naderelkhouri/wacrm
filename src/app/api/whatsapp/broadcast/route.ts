@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { sendTemplateMessage } from '@/lib/whatsapp/meta-api'
+import { sendUazapiTemplateMessage } from '@/lib/whatsapp/uazapi'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import type { SendTimeParams } from '@/lib/whatsapp/template-send-builder'
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard'
@@ -216,6 +217,7 @@ export async function POST(request: Request) {
     const results: BroadcastResult[] = []
     let sentCount = 0
     let failedCount = 0
+    const isUazapi = config.provider === 'uazapi' && Boolean(config.api_url)
 
     for (const recipient of recipients) {
       const sanitized = sanitizePhoneForMeta(recipient.phone)
@@ -238,16 +240,27 @@ export async function POST(request: Request) {
 
       for (const variant of variants) {
         try {
-          const result = await sendTemplateMessage({
-            phoneNumberId: config.phone_number_id,
-            accessToken,
-            to: variant,
-            templateName: template_name,
-            language: template_language || 'en_US',
-            template: templateRow ?? undefined,
-            messageParams: recipient.messageParams,
-            params: recipient.params ?? [],
-          })
+          const result = isUazapi
+            ? await sendUazapiTemplateMessage({
+                apiUrl: config.api_url as string,
+                instanceToken: accessToken,
+                instanceName: (config.instance_name as string) || null,
+                to: variant,
+                templateName: template_name,
+                template: templateRow ?? undefined,
+                messageParams: recipient.messageParams,
+                params: recipient.params ?? [],
+              })
+            : await sendTemplateMessage({
+                phoneNumberId: config.phone_number_id,
+                accessToken,
+                to: variant,
+                templateName: template_name,
+                language: template_language || 'en_US',
+                template: templateRow ?? undefined,
+                messageParams: recipient.messageParams,
+                params: recipient.params ?? [],
+              })
           sentMessageId = result.messageId
           lastError = null
           break

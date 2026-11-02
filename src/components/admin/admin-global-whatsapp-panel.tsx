@@ -37,6 +37,9 @@ interface MetaPhoneInfo {
 
 interface GlobalConfigData {
   configured: boolean;
+  provider?: 'meta' | 'uazapi';
+  api_url?: string;
+  instance_name?: string;
   phone_number_id: string;
   waba_id: string;
   has_access_token: boolean;
@@ -58,6 +61,9 @@ export function AdminGlobalWhatsAppPanel() {
   const [disconnecting, setDisconnecting] = useState(false);
 
   // Form states
+  const [provider, setProvider] = useState<'meta' | 'uazapi'>('meta');
+  const [apiUrl, setApiUrl] = useState('');
+  const [instanceName, setInstanceName] = useState('');
   const [phoneNumberId, setPhoneNumberId] = useState('');
   const [wabaId, setWabaId] = useState('');
   const [accessToken, setAccessToken] = useState('');
@@ -87,6 +93,9 @@ export function AdminGlobalWhatsAppPanel() {
       const data: GlobalConfigData = await res.json();
 
       if (data.configured) {
+        setProvider(data.provider === 'uazapi' ? 'uazapi' : 'meta');
+        setApiUrl(data.api_url || '');
+        setInstanceName(data.instance_name || '');
         setPhoneNumberId(data.phone_number_id || '');
         setWabaId(data.waba_id || '');
         setAccessToken(data.access_token_masked || '');
@@ -128,7 +137,11 @@ export function AdminGlobalWhatsAppPanel() {
   };
 
   const handleTestConnection = async () => {
-    if (!phoneNumberId) {
+    if (provider === 'uazapi' && !apiUrl) {
+      toast.error('Informe a URL da API Uazapi');
+      return;
+    }
+    if (provider === 'meta' && !phoneNumberId) {
       toast.error('Informe o Phone Number ID');
       return;
     }
@@ -139,6 +152,9 @@ export function AdminGlobalWhatsAppPanel() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          provider,
+          api_url: apiUrl,
+          instance_name: instanceName,
           phone_number_id: phoneNumberId,
           access_token: accessToken,
         }),
@@ -146,12 +162,12 @@ export function AdminGlobalWhatsAppPanel() {
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Falha ao validar com a Meta Cloud API');
+        throw new Error(data.error || 'Falha ao validar conexão WhatsApp');
       }
 
       setPhoneInfo(data.phone_info);
       setStatus('connected');
-      toast.success(data.message || 'Conexão validada com sucesso na Meta!');
+      toast.success(data.message || 'Conexão validada com sucesso!');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Falha na conexão';
       setStatus('disconnected');
@@ -164,12 +180,22 @@ export function AdminGlobalWhatsAppPanel() {
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!phoneNumberId || !wabaId) {
+    if (provider === 'uazapi') {
+      if (!apiUrl) {
+        toast.error('Preencha a URL do Servidor Uazapi.');
+        return;
+      }
+    } else if (!phoneNumberId || !wabaId) {
       toast.error('Preencha o Phone Number ID e o WABA ID.');
       return;
     }
+
     if (!accessToken) {
-      toast.error('Insira o Token de Acesso Permanente da Meta.');
+      toast.error(
+        provider === 'uazapi'
+          ? 'Insira o Token da Instância Uazapi.'
+          : 'Insira o Token de Acesso Permanente da Meta.'
+      );
       return;
     }
 
@@ -179,6 +205,9 @@ export function AdminGlobalWhatsAppPanel() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          provider,
+          api_url: apiUrl,
+          instance_name: instanceName,
           phone_number_id: phoneNumberId,
           waba_id: wabaId,
           access_token: accessToken,
@@ -308,7 +337,7 @@ export function AdminGlobalWhatsAppPanel() {
                 variant="outline"
                 size="sm"
                 onClick={handleTestConnection}
-                disabled={testing || saving || !phoneNumberId}
+                disabled={testing || saving || (provider === 'uazapi' ? !apiUrl : !phoneNumberId)}
                 className="gap-2 text-xs"
               >
                 {testing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5 text-amber-500" />}
@@ -361,41 +390,126 @@ export function AdminGlobalWhatsAppPanel() {
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-primary" />
-                Credenciais da Meta Cloud API
+                {provider === 'uazapi'
+                  ? 'Credenciais Globais da Uazapi (WhatsApp API Segura)'
+                  : 'Credenciais da Meta Cloud API'}
               </CardTitle>
               <CardDescription>
-                Obtenha essas credenciais no portal Meta for Developers (Painel do App &gt; WhatsApp &gt; Configuração da API).
+                {provider === 'uazapi'
+                  ? 'Conecte uma instância Uazapi como provedor global do WhatsApp para toda a plataforma.'
+                  : 'Obtenha essas credenciais no portal Meta for Developers (Painel do App > WhatsApp > Configuração da API).'}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSaveConfig} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="phoneNumberId">Phone Number ID *</Label>
-                    <Input
-                      id="phoneNumberId"
-                      placeholder="Ex: 104829102910291"
-                      value={phoneNumberId}
-                      onChange={(e) => setPhoneNumberId(e.target.value.trim())}
-                      required
-                    />
-                  </div>
+                {/* Provider Selector */}
+                <div className="space-y-2">
+                  <Label>Provedor Global do WhatsApp</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setProvider('meta')}
+                      className={`flex flex-col items-start p-3 rounded-lg border text-left transition-all ${
+                        provider === 'meta'
+                          ? 'border-primary bg-primary/10 text-foreground'
+                          : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className="font-semibold text-sm">Meta Cloud API (Oficial)</span>
+                        {provider === 'meta' && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                      </div>
+                      <span className="text-xs text-muted-foreground mt-1">
+                        Conexão oficial via Meta Graph API (WABA).
+                      </span>
+                    </button>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="wabaId">WhatsApp Business Account ID (WABA) *</Label>
-                    <Input
-                      id="wabaId"
-                      placeholder="Ex: 294829102910291"
-                      value={wabaId}
-                      onChange={(e) => setWabaId(e.target.value.trim())}
-                      required
-                    />
+                    <button
+                      type="button"
+                      onClick={() => setProvider('uazapi')}
+                      className={`flex flex-col items-start p-3 rounded-lg border text-left transition-all ${
+                        provider === 'uazapi'
+                          ? 'border-emerald-500 bg-emerald-500/10 text-foreground'
+                          : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className="font-semibold text-sm">Uazapi (API WhatsApp Segura)</span>
+                        {provider === 'uazapi' && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+                      </div>
+                      <span className="text-xs text-muted-foreground mt-1">
+                        Conexão direta via servidor Uazapi v2 / Go.
+                      </span>
+                    </button>
                   </div>
                 </div>
 
+                {provider === 'uazapi' ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="apiUrl">URL do Servidor Uazapi *</Label>
+                      <Input
+                        id="apiUrl"
+                        placeholder="Ex: https://free.uazapi.com ou https://api.seudominio.com"
+                        value={apiUrl}
+                        onChange={(e) => setApiUrl(e.target.value.trim())}
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="instanceName">Nome da Instância (Opcional)</Label>
+                        <Input
+                          id="instanceName"
+                          placeholder="Ex: global-master"
+                          value={instanceName}
+                          onChange={(e) => setInstanceName(e.target.value.trim())}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="phoneNumberId">Número WhatsApp / ID (Opcional)</Label>
+                        <Input
+                          id="phoneNumberId"
+                          placeholder="Ex: 5511999998888 (auto-detectado)"
+                          value={phoneNumberId}
+                          onChange={(e) => setPhoneNumberId(e.target.value.trim())}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="phoneNumberId">Phone Number ID *</Label>
+                      <Input
+                        id="phoneNumberId"
+                        placeholder="Ex: 104829102910291"
+                        value={phoneNumberId}
+                        onChange={(e) => setPhoneNumberId(e.target.value.trim())}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="wabaId">WhatsApp Business Account ID (WABA) *</Label>
+                      <Input
+                        id="wabaId"
+                        placeholder="Ex: 294829102910291"
+                        value={wabaId}
+                        onChange={(e) => setWabaId(e.target.value.trim())}
+                        required
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="accessToken">Token de Acesso Permanente (System User Token) *</Label>
+                    <Label htmlFor="accessToken">
+                      {provider === 'uazapi'
+                        ? 'Token da Instância Uazapi (token / apikey) *'
+                        : 'Token de Acesso Permanente (System User Token) *'}
+                    </Label>
                     <button
                       type="button"
                       onClick={() => setShowToken(!showToken)}
@@ -408,7 +522,11 @@ export function AdminGlobalWhatsAppPanel() {
                   <Input
                     id="accessToken"
                     type={showToken ? 'text' : 'password'}
-                    placeholder="EAAG... (Token Permanente da Meta com escopos de envio)"
+                    placeholder={
+                      provider === 'uazapi'
+                        ? 'Token de autenticação da instância Uazapi'
+                        : 'EAAG... (Token Permanente da Meta com escopos de envio)'
+                    }
                     value={accessToken}
                     onChange={(e) => setAccessToken(e.target.value.trim())}
                     required
@@ -504,7 +622,7 @@ export function AdminGlobalWhatsAppPanel() {
                     type="button"
                     variant="outline"
                     onClick={handleTestConnection}
-                    disabled={testing || saving || !phoneNumberId}
+                    disabled={testing || saving || (provider === 'uazapi' ? !apiUrl : !phoneNumberId)}
                   >
                     {testing && <RefreshCw className="h-4 w-4 animate-spin mr-2" />}
                     Testar Conexão

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { sendReactionMessage } from '@/lib/whatsapp/meta-api';
+import { sendUazapiReactionMessage } from '@/lib/whatsapp/uazapi';
 import { decrypt } from '@/lib/whatsapp/encryption';
 import { sanitizePhoneForMeta } from '@/lib/whatsapp/phone-utils';
 import {
@@ -120,7 +121,7 @@ export async function POST(request: Request) {
     // WhatsApp config + access token. Account-scoped post-multi-user.
     const { data: config, error: configError } = await supabase
       .from('whatsapp_config')
-      .select('phone_number_id, access_token')
+      .select('provider, api_url, instance_name, phone_number_id, access_token')
       .eq('account_id', accountId)
       .single();
 
@@ -135,13 +136,24 @@ export async function POST(request: Request) {
     const sanitizedPhone = sanitizePhoneForMeta(contact.phone);
 
     try {
-      await sendReactionMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
-        to: sanitizedPhone,
-        targetMessageId: targetMessage.message_id,
-        emoji,
-      });
+      if (config.provider === 'uazapi' && config.api_url) {
+        await sendUazapiReactionMessage({
+          apiUrl: config.api_url as string,
+          instanceToken: accessToken,
+          instanceName: (config.instance_name as string) || null,
+          to: sanitizedPhone,
+          targetMessageId: targetMessage.message_id,
+          emoji,
+        });
+      } else {
+        await sendReactionMessage({
+          phoneNumberId: config.phone_number_id,
+          accessToken,
+          to: sanitizedPhone,
+          targetMessageId: targetMessage.message_id,
+          emoji,
+        });
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Unknown Meta API error';

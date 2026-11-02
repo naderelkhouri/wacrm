@@ -13,6 +13,11 @@ import {
   handleTemplateWebhookChange,
   isTemplateWebhookField,
 } from '@/lib/whatsapp/template-webhook'
+import {
+  isUazapiWebhookPayload,
+  extractUazapiWebhookToken,
+  parseUazapiWebhookToMetaEntries,
+} from '@/lib/whatsapp/uazapi'
 import { recordTelemetryEvent } from '@/lib/telemetry/telemetry-service'
 
 // The `after()` callback in POST runs within this route's max duration.
@@ -189,12 +194,116 @@ export async function GET(request: Request) {
   }
 }
 
-// POST - Receive messages
+// POST - Receive messages (supports both Meta Cloud API and Uazapi webhooks)
 export async function POST(request: Request) {
   // Read raw body first so we can HMAC-verify the exact bytes Meta
   // signed. request.json() would re-encode and break the signature.
   const rawBody = await request.text()
   const signature = request.headers.get('x-hub-signature-256')
+
+  // If no Meta signature header is present, check if this is an authenticated Uazapi webhook
+  if (!signature) {
+    let parsedRaw: unknown = null
+    try {
+      parsedRaw = JSON.parse(rawBody)
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    }
+
+    if (isUazapiWebhookPayload(parsedRaw)) {
+      const uazToken = extractUazapiWebhookToken(request, parsedRaw)
+      if (!uazToken) {
+        recordTelemetryEvent({
+          category: 'webhook_error',
+          metric_name: 'whatsapp.webhook.uazapi_token_missing',
+          severity: 'warning',
+          value: 1,
+        })
+        return NextResponse.json({ error: 'Missing Uazapi webhook token' }, { status: 401 })
+      }
+
+      // Match token against whatsapp_config rows with provider = 'uazapi'
+      const { data: uazConfigs } = await supabaseAdmin()
+        .from('whatsapp_config')
+        .select('id, account_id, user_id, phone_number_id, instance_name, access_token, verify_token')
+        .eq('provider', 'uazapi')
+
+      let matchedPhoneNumberId: string | null = null
+      for (const cfg of uazConfigs || []) {
+        let tokenMatch = false
+        if (cfg.verify_token) {
+          try {
+            if (decrypt(cfg.verify_token) === uazToken) tokenMatch = true
+          } catch {}
+        }
+        if (!tokenMatch && cfg.access_token) {
+          try {
+            if (decrypt(cfg.access_token) === uazToken) tokenMatch = true
+          } catch {}
+        }
+        if (tokenMatch) {
+          matchedPhoneNumberId = cfg.phone_number_id
+          break
+        }
+      }
+
+      // Also check global_whatsapp_config if not matched on tenant row
+      if (!matchedPhoneNumberId) {
+        const { data: globalRow } = await supabaseAdmin()
+          .from('platform_settings')
+          .select('value')
+          .eq('key', 'global_whatsapp_config')
+          .maybeSingle()
+        const globalVal = (globalRow?.value as Record<string, unknown>) || {}
+        if (globalVal.provider === 'uazapi' && globalVal.phone_number_id) {
+          let globalMatch = false
+          if (globalVal.encrypted_verify_token) {
+            try {
+              if (decrypt(globalVal.encrypted_verify_token as string) === uazToken) globalMatch = true
+            } catch {}
+          }
+          if (!globalMatch && globalVal.encrypted_access_token) {
+            try {
+              if (decrypt(globalVal.encrypted_access_token as string) === uazToken) globalMatch = true
+            } catch {}
+          }
+          if (globalMatch) {
+            matchedPhoneNumberId = globalVal.phone_number_id as string
+          }
+        }
+      }
+
+      if (!matchedPhoneNumberId) {
+        recordTelemetryEvent({
+          category: 'webhook_error',
+          metric_name: 'whatsapp.webhook.uazapi_token_invalid',
+          severity: 'critical',
+          value: 1,
+        })
+        return NextResponse.json({ error: 'Invalid Uazapi webhook token' }, { status: 401 })
+      }
+
+      recordTelemetryEvent({
+        category: 'webhook_inbound',
+        metric_name: 'whatsapp.webhook.uazapi.received',
+        severity: 'info',
+        value: rawBody.length,
+      })
+
+      const entries = parseUazapiWebhookToMetaEntries(parsedRaw, matchedPhoneNumberId)
+      if (entries.length > 0) {
+        after(async () => {
+          try {
+            await processWebhook({ entry: entries as WhatsAppWebhookEntry[] })
+          } catch (error) {
+            console.error('Error processing Uazapi webhook:', error)
+          }
+        })
+      }
+
+      return NextResponse.json({ status: 'received', provider: 'uazapi' }, { status: 200 })
+    }
+  }
 
   if (!verifyMetaWebhookSignature(rawBody, signature)) {
     // 401 (not 200) — we want Meta's delivery dashboard to show failures
@@ -896,6 +1005,10 @@ async function parseMessageContent(
   const verifyAndBuildUrl = async (
     mediaId: string
   ): Promise<string | null> => {
+    // If mediaId is already a direct HTTPS/HTTP URL (e.g. from Uazapi), return it directly
+    if (/^https?:\/\//i.test(mediaId)) {
+      return mediaId
+    }
     try {
       await getMediaUrl({ mediaId, accessToken })
       return `/api/whatsapp/media/${mediaId}`
