@@ -12,28 +12,32 @@ import {
   normalizeUazapiBaseUrl,
 } from '@/lib/whatsapp/uazapi'
 import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
+import { ensureAccountForUser } from '@/lib/auth/ensure-account'
 
 /**
- * Resolve the caller's account_id from their profile. Inlined here
- * (rather than going through `@/lib/auth/account.getCurrentAccount`)
- * because the GET handler wants to return shaped 200s for every
- * non-auth failure mode, not throw — keeping the helper minimal lets
- * the existing response branches stay as-is.
- *
- * Returns null if the user has no profile or no account; callers
- * should treat that the same as "not connected".
+ * Resolve the caller's account_id from their profile with self-healing fallback.
  */
 async function resolveAccountId(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
+  user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> | null },
 ): Promise<string | null> {
   const { data, error } = await supabase
     .from('profiles')
     .select('account_id')
-    .eq('user_id', userId)
+    .eq('user_id', user.id)
     .maybeSingle()
-  if (error || !data?.account_id) return null
-  return data.account_id as string
+
+  if (!error && data?.account_id) return data.account_id as string
+
+  // Self-healing fallback: guarantee an account/profile exists for the user
+  try {
+    const healed = await ensureAccountForUser(user)
+    if (healed?.accountId) return healed.accountId
+  } catch (err) {
+    console.error('[resolveAccountId] Failed to self-heal account:', err)
+  }
+
+  return null
 }
 
 // Lazy-initialised service-role client. We need it to detect a
@@ -78,7 +82,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const accountId = await resolveAccountId(supabase, user.id)
+    const accountId = await resolveAccountId(supabase, user)
     if (!accountId) {
       return NextResponse.json(
         {
@@ -233,7 +237,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const accountId = await resolveAccountId(supabase, user.id)
+    const accountId = await resolveAccountId(supabase, user)
     if (!accountId) {
       return NextResponse.json(
         { error: 'Your profile is not linked to an account.' },
@@ -256,7 +260,25 @@ export async function POST(request: Request) {
     const provider = rawProvider === 'uazapi' ? 'uazapi' : 'meta'
 
     if (provider === 'uazapi') {
-      if (!access_token || !api_url) {
+      let resolvedToken = (access_token && String(access_token).trim()) || ''
+
+      if (!resolvedToken || resolvedToken === '••••••••••••••••') {
+        const { data: existingConfig } = await supabaseAdmin()
+          .from('whatsapp_config')
+          .select('access_token')
+          .eq('account_id', accountId)
+          .maybeSingle()
+
+        if (existingConfig?.access_token) {
+          try {
+            resolvedToken = decrypt(existingConfig.access_token)
+          } catch {
+            // failed decrypt
+          }
+        }
+      }
+
+      if (!resolvedToken || !api_url) {
         return NextResponse.json(
           { error: 'URL da API Uazapi e Token da Instância são obrigatórios.' },
           { status: 400 }
@@ -277,7 +299,7 @@ export async function POST(request: Request) {
       try {
         phoneInfo = await verifyUazapiInstance({
           apiUrl: normalizedApiUrl,
-          instanceToken: String(access_token).trim(),
+          instanceToken: resolvedToken,
           instanceName: instance_name ? String(instance_name).trim() : null,
           fallbackPhoneId: rawPhoneNumberId ? String(rawPhoneNumberId).trim() : null,
         })
@@ -311,9 +333,9 @@ export async function POST(request: Request) {
 
       const tokenToVerifyWebhook =
         (typeof verify_token === 'string' && verify_token.trim()) ||
-        String(access_token).trim()
+        resolvedToken
 
-      const encryptedAccessToken = encrypt(String(access_token).trim())
+      const encryptedAccessToken = encrypt(resolvedToken)
       const encryptedVerifyToken = encrypt(tokenToVerifyWebhook)
 
       // Auto-configure webhook on the Uazapi instance (best-effort)
@@ -323,7 +345,7 @@ export async function POST(request: Request) {
       const webhookUrl = `${appOrigin.replace(/\/+$/, '')}/api/whatsapp/webhook?token=${encodeURIComponent(tokenToVerifyWebhook)}`
       await configureUazapiWebhook({
         apiUrl: normalizedApiUrl,
-        instanceToken: String(access_token).trim(),
+        instanceToken: resolvedToken,
         instanceName: instance_name ? String(instance_name).trim() : null,
         webhookUrl,
       })
@@ -385,8 +407,25 @@ export async function POST(request: Request) {
     }
 
     const phone_number_id = rawPhoneNumberId
+    let resolvedMetaToken = (access_token && String(access_token).trim()) || ''
 
-    if (!access_token || !phone_number_id) {
+    if (!resolvedMetaToken || resolvedMetaToken === '••••••••••••••••') {
+      const { data: existingConfig } = await supabaseAdmin()
+        .from('whatsapp_config')
+        .select('access_token')
+        .eq('account_id', accountId)
+        .maybeSingle()
+
+      if (existingConfig?.access_token) {
+        try {
+          resolvedMetaToken = decrypt(existingConfig.access_token)
+        } catch {
+          // decrypt error
+        }
+      }
+    }
+
+    if (!resolvedMetaToken || !phone_number_id) {
       return NextResponse.json(
         { error: 'access_token and phone_number_id are required' },
         { status: 400 }
@@ -439,7 +478,7 @@ export async function POST(request: Request) {
     try {
       phoneInfo = await verifyPhoneNumber({
         phoneNumberId: phone_number_id,
-        accessToken: access_token,
+        accessToken: resolvedMetaToken,
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown Meta API error'
@@ -454,7 +493,7 @@ export async function POST(request: Request) {
     let encryptedAccessToken: string
     let encryptedVerifyToken: string | null
     try {
-      encryptedAccessToken = encrypt(access_token)
+      encryptedAccessToken = encrypt(resolvedMetaToken)
       encryptedVerifyToken = verify_token ? encrypt(verify_token) : null
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown encryption error'
@@ -512,7 +551,7 @@ export async function POST(request: Request) {
         try {
           await registerPhoneNumber({
             phoneNumberId: phone_number_id,
-            accessToken: access_token,
+            accessToken: resolvedMetaToken,
             pin,
           })
           registeredAt = new Date().toISOString()
@@ -537,7 +576,7 @@ export async function POST(request: Request) {
       try {
         await subscribeWabaToApp({
           wabaId: waba_id,
-          accessToken: access_token,
+          accessToken: resolvedMetaToken,
         })
         subscribedAppsAt = new Date().toISOString()
       } catch (err) {
@@ -653,7 +692,7 @@ export async function DELETE() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const accountId = await resolveAccountId(supabase, user.id)
+    const accountId = await resolveAccountId(supabase, user)
     if (!accountId) {
       return NextResponse.json(
         { error: 'Your profile is not linked to an account.' },

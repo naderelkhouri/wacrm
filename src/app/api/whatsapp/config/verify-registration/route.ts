@@ -5,6 +5,7 @@ import {
   getSubscribedApps,
   verifyPhoneNumber,
 } from '@/lib/whatsapp/meta-api'
+import { ensureAccountForUser } from '@/lib/auth/ensure-account'
 
 /**
  * GET /api/whatsapp/config/verify-registration
@@ -39,14 +40,25 @@ export async function GET() {
   }
 
   // whatsapp_config is one-row-per-account post-017. Resolve the
-  // caller's account_id so a teammate who joined an existing account
-  // sees the same registration state as the admin who set it up.
+  // caller's account_id with self-healing fallback.
+  let accountId: string | undefined
   const { data: profile } = await supabase
     .from('profiles')
     .select('account_id')
     .eq('user_id', user.id)
     .maybeSingle()
-  const accountId = profile?.account_id as string | undefined
+
+  if (profile?.account_id) {
+    accountId = profile.account_id as string
+  } else {
+    try {
+      const healed = await ensureAccountForUser(user)
+      if (healed?.accountId) accountId = healed.accountId
+    } catch (e) {
+      console.warn('[verify-registration] Self-healing profile error:', e)
+    }
+  }
+
   if (!accountId) {
     return NextResponse.json({
       live: false,

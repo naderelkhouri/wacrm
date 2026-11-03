@@ -465,7 +465,7 @@
       "renameAria": "Rename {name}",
       "deleteTitle": "Delete field",
       "deleteConfirm": "Delete \"{name}\"? This also removes its stored value on every contact. This cannot be undone.",
-      "toastNoAccount": "Your profile is not linked to an account.",
+      "toastNoAccount": "Seu perfil não está vinculado a uma conta.",
       "toastDuplicate": "A field named \"{name}\" already exists.",
       "toastCreateFailed": "Could not create field. You may not have permission.",
       "toastCreated": "Created \"{name}\".",
@@ -494,7 +494,7 @@
       "toastFailedMoveDeal": "Failed to move deal",
       "toastFailedCreatePipeline": "Failed to create pipeline",
       "toastPipelineCreated": "Pipeline created",
-      "toastNotLinkedToAccount": "Your profile is not linked to an account."
+      "toastNotLinkedToAccount": "Seu perfil não está vinculado a uma conta."
     },
     "board": {
       "dropDealHere": "Drop a deal here",
@@ -536,7 +536,7 @@
       "toastRequired": "Title, contact, and stage are required",
       "toastFailedSave": "Failed to save deal",
       "toastNotSignedIn": "Not signed in",
-      "toastNotLinked": "Your profile is not linked to an account.",
+      "toastNotLinked": "Seu perfil não está vinculado a uma conta.",
       "toastFailedCreate": "Failed to create deal",
       "toastUpdated": "Deal updated",
       "toastCreated": "Deal created",
@@ -668,7 +668,7 @@
       },
       "toastGiveName": "Give the broadcast a name before saving a draft.",
       "toastNotSignedIn": "Not signed in.",
-      "toastNotLinked": "Your profile is not linked to an account.",
+      "toastNotLinked": "Seu perfil não está vinculado a uma conta.",
       "toastFailedDraft": "Failed to save draft: {error}",
       "toastDraftSaved": "Draft saved"
     },

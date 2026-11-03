@@ -30,6 +30,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
 import { hasMinRole, isAccountRole, type AccountRole } from "./roles";
+import { ensureAccountForUser } from "./ensure-account";
 
 // ------------------------------------------------------------
 // Errors
@@ -130,17 +131,37 @@ export async function getCurrentAccount(): Promise<AccountContext> {
     console.error("[getCurrentAccount] profile fetch error:", error);
     throw new ForbiddenError("Could not load account context");
   }
-  if (!data || !data.account_id || !data.account_role) {
+
+  let profileData = data;
+  if (!profileData || !profileData.account_id || !profileData.account_role) {
+    try {
+      const healed = await ensureAccountForUser(user);
+      if (healed?.accountId) {
+        const { data: healedProfile } = await supabase
+          .from("profiles")
+          .select("account_id, account_role")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (healedProfile?.account_id && healedProfile?.account_role) {
+          profileData = healedProfile;
+        }
+      }
+    } catch (e) {
+      console.warn("[getCurrentAccount] Self-healing profile/account fallback error:", e);
+    }
+  }
+
+  if (!profileData || !profileData.account_id || !profileData.account_role) {
     // Pre-migration profile, or a manual insert that skipped the
     // signup trigger. The user is authenticated but the app has
     // no way to scope their queries — treat as forbidden.
     throw new ForbiddenError("Profile is not linked to an account");
   }
-  if (!isAccountRole(data.account_role)) {
+  if (!isAccountRole(profileData.account_role)) {
     // The DB enum should make this impossible, but a future
     // migration that broadens the enum without updating TS would
     // hit this — surface it rather than silently widening.
-    throw new ForbiddenError(`Unknown account role: ${data.account_role}`);
+    throw new ForbiddenError(`Unknown account role: ${profileData.account_role}`);
   }
 
   // Load the account with a plain point lookup by id rather than an
@@ -156,7 +177,7 @@ export async function getCurrentAccount(): Promise<AccountContext> {
   const { data: account, error: accountErr } = await supabase
     .from("accounts")
     .select("id, name, default_currency, allow_member_invites, max_members")
-    .eq("id", data.account_id)
+    .eq("id", profileData.account_id)
     .maybeSingle();
 
   if (accountErr) {
@@ -172,8 +193,8 @@ export async function getCurrentAccount(): Promise<AccountContext> {
   return {
     supabase,
     userId: user.id,
-    accountId: data.account_id,
-    role: data.account_role,
+    accountId: profileData.account_id,
+    role: profileData.account_role,
     account: {
       id: account.id,
       name: account.name,

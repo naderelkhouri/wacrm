@@ -297,13 +297,8 @@ export function WhatsAppConfig() {
       if (tokenEdited && accessToken !== MASKED_TOKEN && accessToken.trim()) {
         payload.access_token = accessToken.trim();
       } else if (config) {
-        toast.error(
-          provider === 'uazapi'
-            ? 'Por segurança, insira novamente o Token da Instância Uazapi para salvar alterações'
-            : 'Please re-enter the Access Token to save changes'
-        );
-        setSaving(false);
-        return;
+        // Reuse existing stored encrypted token if not re-typed
+        payload.access_token = accessToken.trim();
       }
 
       const res = await fetch('/api/whatsapp/config', {
@@ -365,7 +360,18 @@ export function WhatsAppConfig() {
   async function handleTestConnection() {
     try {
       setTesting(true);
-      const res = await fetch('/api/whatsapp/config', { method: 'GET' });
+      const res = await fetch('/api/whatsapp/config/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider,
+          api_url: apiUrl.trim(),
+          instance_name: instanceName.trim() || null,
+          phone_number_id: phoneNumberId.trim() || null,
+          access_token: accessToken.trim(),
+        }),
+      });
+
       const payload = await res.json();
 
       if (payload.connected) {
@@ -373,15 +379,16 @@ export function WhatsAppConfig() {
         setResetReason(null);
         setStatusMessage('');
         toast.success(
-          payload.phone_info?.verified_name
-            ? `Connected to ${payload.phone_info.verified_name}`
-            : 'API connection successful'
+          payload.message ||
+            (payload.phone_info?.verified_name
+              ? `Connected to ${payload.phone_info.verified_name}`
+              : 'API connection successful')
         );
       } else {
         setConnectionStatus('disconnected');
-        setResetReason(payload.needs_reset ? 'token_corrupted' : payload.reason === 'meta_api_error' ? 'meta_api_error' : null);
-        setStatusMessage(payload.message || '');
-        toast.error(payload.message || 'API connection failed');
+        const errMsg = payload.error || payload.message || 'API connection failed';
+        setStatusMessage(errMsg);
+        toast.error(errMsg);
       }
     } catch (err) {
       console.error('Test connection error:', err);
@@ -1075,7 +1082,7 @@ export function WhatsAppConfig() {
           <Button
             variant="outline"
             onClick={handleTestConnection}
-            disabled={testing || !config}
+            disabled={testing || (provider === 'uazapi' ? !apiUrl.trim() : !phoneNumberId.trim())}
             className="border-border text-muted-foreground hover:text-foreground hover:bg-muted"
           >
             {testing ? (

@@ -171,6 +171,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      if (!data || !data.account_id) {
+        try {
+          const healRes = await fetch('/api/auth/profile/ensure', { method: 'POST' });
+          if (healRes.ok) {
+            const retry = await supabase
+              .from("profiles")
+              .select(
+                "id, full_name, email, avatar_url, role, beta_features, account_id, account_role, is_super_admin",
+              )
+              .eq("user_id", userId)
+              .maybeSingle();
+            if (retry.data?.account_id) {
+              data = retry.data;
+            }
+          }
+        } catch (healErr) {
+          console.warn("[AuthProvider] Self-healing profile error:", healErr);
+        }
+      }
+
       if (data) {
         // Load the account with a plain lookup by id instead of an
         // embedded FK join. The embed (`account:accounts!inner(...)`)
