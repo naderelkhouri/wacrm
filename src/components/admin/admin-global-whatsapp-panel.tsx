@@ -13,12 +13,8 @@ import {
   Send,
   ExternalLink,
   ShieldCheck,
-  AlertTriangle,
   Zap,
-  Info,
   Trash2,
-  ArrowRight,
-  HelpCircle,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -26,7 +22,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface MetaPhoneInfo {
   id: string;
