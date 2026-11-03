@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,7 @@ export default function ResetPasswordPage() {
 }
 
 function ResetPasswordForm() {
+  const t = useTranslations("ResetPasswordPage");
   const searchParams = useSearchParams();
   const initialError = searchParams.get("error");
 
@@ -149,12 +151,12 @@ function ResetPasswordForm() {
     setError(null);
 
     if (password.length < 6) {
-      setError("Password must be at least 6 characters");
+      setError(t("passwordTooShort"));
       return;
     }
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      setError(t("passwordsDoNotMatch"));
       return;
     }
 
@@ -219,17 +221,16 @@ function ResetPasswordForm() {
               <AlertCircle className="h-6 w-6 text-destructive" />
             </div>
             <CardTitle className="text-xl text-foreground">
-              Invalid or Expired Link
+              {t("invalidLinkTitle")}
             </CardTitle>
             <CardDescription className="text-muted-foreground">
-              {error ||
-                "This password reset link is invalid or has expired. Please request a new link."}
+              {error || t("invalidLinkDesc")}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <Link href="/forgot-password">
               <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-                Request new reset link
+                {t("requestNewLink")}
               </Button>
             </Link>
             <Link href="/login">
@@ -237,7 +238,7 @@ function ResetPasswordForm() {
                 variant="outline"
                 className="w-full border-border text-muted-foreground hover:bg-muted hover:text-foreground"
               >
-                Back to sign in
+                {t("continueToApp")}
               </Button>
             </Link>
           </CardContent>
@@ -255,16 +256,16 @@ function ResetPasswordForm() {
               <CheckCircle className="h-6 w-6 text-primary" />
             </div>
             <CardTitle className="text-xl text-foreground">
-              Password updated!
+              {t("successTitle")}
             </CardTitle>
             <CardDescription className="text-muted-foreground">
-              Your password has been successfully reset. You can now access your account.
+              {t("successDesc")}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <Link href="/dashboard">
               <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-                Go to dashboard
+                {t("continueToApp")}
               </Button>
             </Link>
             <Link href="/login">
@@ -272,7 +273,7 @@ function ResetPasswordForm() {
                 variant="outline"
                 className="w-full border-border text-muted-foreground hover:bg-muted hover:text-foreground"
               >
-                Sign in again
+                {t("continueToApp")}
               </Button>
             </Link>
           </CardContent>
@@ -288,9 +289,9 @@ function ResetPasswordForm() {
           <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
             <KeyRound className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle className="text-xl text-foreground">Set new password</CardTitle>
+          <CardTitle className="text-xl text-foreground">{t("title")}</CardTitle>
           <CardDescription className="text-muted-foreground">
-            Enter your new password below
+            {t("description")}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -303,12 +304,12 @@ function ResetPasswordForm() {
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="password" className="text-muted-foreground">
-                New password
+                {t("passwordLabel")}
               </Label>
               <Input
                 id="password"
                 type="password"
-                placeholder="At least 6 characters"
+                placeholder={t("passwordPlaceholder")}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -320,12 +321,12 @@ function ResetPasswordForm() {
 
             <div className="flex flex-col gap-2">
               <Label htmlFor="confirmPassword" className="text-muted-foreground">
-                Confirm new password
+                {t("confirmPasswordLabel")}
               </Label>
               <Input
                 id="confirmPassword"
                 type="password"
-                placeholder="Repeat your new password"
+                placeholder={t("confirmPasswordPlaceholder")}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
@@ -340,16 +341,16 @@ function ResetPasswordForm() {
               disabled={loading}
               className="mt-2 h-10 w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
-              {loading ? "Updating password..." : "Update password"}
+              {loading ? t("updating") : t("updatePassword")}
             </Button>
           </form>
 
           <Link
             href="/login"
-            className="mt-6 flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+            className="mt-6 flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground font-medium"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to sign in
+            {t("continueToApp")}
           </Link>
         </CardContent>
       </Card>

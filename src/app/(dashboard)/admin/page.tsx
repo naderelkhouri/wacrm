@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
@@ -10,22 +9,17 @@ import {
   Building2,
   CreditCard,
   Settings,
-  Users,
-  MessageSquare,
   Radio,
   Activity,
   Search,
   RefreshCw,
   CheckCircle2,
-  AlertTriangle,
   Clock,
   XCircle,
-  ExternalLink,
   Sliders,
   DollarSign,
   UserCheck,
   Lock,
-  ArrowRight,
   TrendingUp,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";

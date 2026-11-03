@@ -1694,5 +1694,75 @@
       "reindexTooltip": "Re-embed all documents (e.g. after adding an embeddings key)",
       "loading": "Loading…"
     }
+  },
+  "Notifications": {
+    "title": "Notifications",
+    "description": "Conversations other teammates assign to you show up here.",
+    "markAllRead": "Mark all as read",
+    "toastMarkReadError": "Failed to mark notification as read",
+    "toastMarkAllError": "Failed to mark all as read",
+    "emptyTitle": "No notifications yet",
+    "emptyHint": "You'll see an alert here when someone assigns you a conversation.",
+    "unread": "Unread",
+    "retry": "Retry"
+  },
+  "Agents": {
+    "title": "AI Agents",
+    "description": "Your bring-your-own-key AI agent — set it up, then test it in the playground before it replies to customers in the inbox.",
+    "tabPlayground": "Playground",
+    "tabSetup": "Setup",
+    "tabUsage": "Usage"
+  },
+  "SignupPage": {
+    "titleAccept": "Create account & join",
+    "title": "Create account",
+    "descAccept": "Verify your email, then accept the invitation to join your team.",
+    "desc": "Get started with CRM for WhatsApp",
+    "fullNameLabel": "Full name",
+    "fullNamePlaceholder": "John Doe",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@example.com",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "At least 6 characters",
+    "confirmPasswordLabel": "Confirm password",
+    "confirmPasswordPlaceholder": "Repeat your password",
+    "passwordsDoNotMatch": "Passwords do not match",
+    "passwordTooShort": "Password must be at least 6 characters",
+    "creatingAccount": "Creating account...",
+    "createAccount": "Create account",
+    "alreadyHaveAccount": "Already have an account?",
+    "signIn": "Sign in",
+    "checkEmailTitle": "Check your email",
+    "checkEmailDesc": "We've sent a confirmation link to {email}. Please check your inbox and click the link to verify your account.",
+    "backToSignIn": "Back to sign in"
+  },
+  "ForgotPasswordPage": {
+    "title": "Reset password",
+    "description": "Enter your email and we'll send you a reset link",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@example.com",
+    "sending": "Sending...",
+    "sendResetLink": "Send reset link",
+    "backToSignIn": "Back to sign in",
+    "checkEmailTitle": "Check your email",
+    "checkEmailDesc": "We've sent a password reset link to {email}. Please check your inbox."
+  },
+  "ResetPasswordPage": {
+    "title": "Set new password",
+    "description": "Enter your new password below",
+    "passwordLabel": "New password",
+    "passwordPlaceholder": "At least 6 characters",
+    "confirmPasswordLabel": "Confirm new password",
+    "confirmPasswordPlaceholder": "Repeat your new password",
+    "passwordsDoNotMatch": "Passwords do not match",
+    "passwordTooShort": "Password must be at least 6 characters",
+    "updating": "Updating password...",
+    "updatePassword": "Save new password",
+    "successTitle": "Password reset successfully",
+    "successDesc": "Your password has been updated. You can now sign in with your new credentials.",
+    "continueToApp": "Go to dashboard",
+    "invalidLinkTitle": "Invalid or expired link",
+    "invalidLinkDesc": "This password reset link has expired or is invalid. Request a new one.",
+    "requestNewLink": "Request a new link"
   }
 }

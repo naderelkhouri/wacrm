@@ -30,7 +30,8 @@ import {
   Info,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
-import { useTranslations } from "next-intl";
+import { ptBR, es, enUS } from "date-fns/locale";
+import { useTranslations, useLocale } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import {
   Sheet,
@@ -118,11 +119,22 @@ interface MessageThreadProps {
   onToggleContactPanel?: () => void;
 }
 
-function formatDateSeparator(dateStr: string, t: ReturnType<typeof useTranslations>): string {
+const DATE_LOCALES: Record<string, typeof ptBR> = {
+  "pt-BR": ptBR,
+  pt: ptBR,
+  es: es,
+  en: enUS,
+};
+
+function formatDateSeparator(
+  dateStr: string,
+  t: ReturnType<typeof useTranslations>,
+  localeObj?: typeof ptBR,
+): string {
   const date = new Date(dateStr);
   if (isToday(date)) return t("today");
   if (isYesterday(date)) return t("yesterday");
-  return format(date, "MMMM d, yyyy");
+  return format(date, "MMMM d, yyyy", { locale: localeObj });
 }
 
 function groupMessagesByDate(messages: Message[]) {
@@ -178,6 +190,8 @@ export function MessageThread({
   const t = useTranslations("Inbox.messageThread");
   const tTimer = useTranslations("Inbox.sessionTimer");
   const tQuote = useTranslations("Inbox.replyQuote");
+  const locale = useLocale();
+  const dateLocale = DATE_LOCALES[locale] ?? ptBR;
 
   const { user } = useAuth();
   const { getPresence, getRow, now } = usePresence();
@@ -1099,7 +1113,7 @@ export function MessageThread({
                 {/* Date separator */}
                 <div className="mb-4 flex items-center justify-center">
                   <span className="rounded-full bg-muted px-3 py-1 text-[10px] font-medium text-muted-foreground">
-                    {formatDateSeparator(group.date, t)}
+                    {formatDateSeparator(group.date, t, dateLocale)}
                   </span>
                 </div>
                 {/* Messages */}

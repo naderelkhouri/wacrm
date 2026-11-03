@@ -1682,5 +1682,75 @@
       "reindexTooltip": "Re-embed all documents (e.g. after adding an embeddings key)",
       "loading": "Loading…"
     }
+  },
+  "Notifications": {
+    "title": "Notificaciones",
+    "description": "Las conversaciones asignadas a ti por otros miembros del equipo aparecerán aquí.",
+    "markAllRead": "Marcar todas como leídas",
+    "toastMarkReadError": "Error al marcar la notificación como leída",
+    "toastMarkAllError": "Error al marcar todas como leídas",
+    "emptyTitle": "No hay notificaciones aún",
+    "emptyHint": "Verás una alerta aquí cuando alguien te asigne una conversación.",
+    "unread": "No leída",
+    "retry": "Reintentar"
+  },
+  "Agents": {
+    "title": "Agentes de IA",
+    "description": "Tu agente de inteligencia artificial con tu propia clave — configúralo y pruébalo en el playground antes de responder a clientes.",
+    "tabPlayground": "Playground",
+    "tabSetup": "Configuración",
+    "tabUsage": "Uso"
+  },
+  "SignupPage": {
+    "titleAccept": "Crear cuenta y unirse",
+    "title": "Crear cuenta",
+    "descAccept": "Verifica tu correo, luego acepta la invitación para unirte a tu equipo.",
+    "desc": "Comienza a usar CRM para WhatsApp",
+    "fullNameLabel": "Nombre completo",
+    "fullNamePlaceholder": "Tu nombre",
+    "emailLabel": "Correo electrónico",
+    "emailPlaceholder": "tu@ejemplo.com",
+    "passwordLabel": "Contraseña",
+    "passwordPlaceholder": "Al menos 6 caracteres",
+    "confirmPasswordLabel": "Confirmar contraseña",
+    "confirmPasswordPlaceholder": "Repite tu contraseña",
+    "passwordsDoNotMatch": "Las contraseñas no coinciden",
+    "passwordTooShort": "La contraseña debe tener al menos 6 caracteres",
+    "creatingAccount": "Creando cuenta...",
+    "createAccount": "Crear cuenta",
+    "alreadyHaveAccount": "¿Ya tienes una cuenta?",
+    "signIn": "Iniciar sesión",
+    "checkEmailTitle": "Verifica tu correo",
+    "checkEmailDesc": "Hemos enviado un enlace de confirmación a {email}. Revisa tu bandeja de entrada y haz clic para verificar tu cuenta.",
+    "backToSignIn": "Volver a iniciar sesión"
+  },
+  "ForgotPasswordPage": {
+    "title": "Recuperar contraseña",
+    "description": "Ingresa tu correo y te enviaremos un enlace de recuperación",
+    "emailLabel": "Correo electrónico",
+    "emailPlaceholder": "tu@ejemplo.com",
+    "sending": "Enviando...",
+    "sendResetLink": "Enviar enlace de recuperación",
+    "backToSignIn": "Volver a iniciar sesión",
+    "checkEmailTitle": "Verifica tu correo",
+    "checkEmailDesc": "Hemos enviado un enlace de recuperación a {email}. Por favor revisa tu bandeja de entrada."
+  },
+  "ResetPasswordPage": {
+    "title": "Establecer nueva contraseña",
+    "description": "Ingresa tu nueva contraseña a continuación",
+    "passwordLabel": "Nueva contraseña",
+    "passwordPlaceholder": "Al menos 6 caracteres",
+    "confirmPasswordLabel": "Confirmar nueva contraseña",
+    "confirmPasswordPlaceholder": "Repite tu nueva contraseña",
+    "passwordsDoNotMatch": "Las contraseñas no coinciden",
+    "passwordTooShort": "La contraseña debe tener al menos 6 caracteres",
+    "updating": "Actualizando contraseña...",
+    "updatePassword": "Guardar nueva contraseña",
+    "successTitle": "Contraseña restablecida con éxito",
+    "successDesc": "Tu contraseña ha sido actualizada. Ahora puedes iniciar sesión.",
+    "continueToApp": "Ir al panel",
+    "invalidLinkTitle": "Enlace inválido o expirado",
+    "invalidLinkDesc": "Este enlace de recuperación ha expirado o no es válido. Solicita uno nuevo.",
+    "requestNewLink": "Solicitar nuevo enlace"
   }
 }

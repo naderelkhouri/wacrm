@@ -3,7 +3,7 @@
 // AI & Heuristic Optimization Generator with 1-Click Execution
 // ============================================================
 
-import type { OptimizationRecommendation, TelemetryMetricsSnapshot, TelemetryEvent } from './types';
+import type { OptimizationRecommendation, TelemetryMetricsSnapshot, TelemetryEvent, RemediationAction } from './types';
 import { executeRemediation } from './auto-remediator';
 
 const SYSTEM_RECOMMENDATIONS: OptimizationRecommendation[] = [
@@ -70,9 +70,11 @@ const activeRecommendations: Map<string, OptimizationRecommendation> = new Map(
  * Generate and return recommendations based on real-time metrics.
  */
 export function getOptimizationRecommendations(
-  _snapshot?: TelemetryMetricsSnapshot,
-  _events?: TelemetryEvent[]
+  snapshot?: TelemetryMetricsSnapshot,
+  events?: TelemetryEvent[]
 ): OptimizationRecommendation[] {
+  void snapshot;
+  void events;
   return Array.from(activeRecommendations.values()).sort((a, b) => {
     // Sort critical and high impact first
     const impactOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -103,7 +105,7 @@ export async function applyRecommendation(
   // Execute the underlying remediation if specified
   if (rec.action_type) {
     await executeRemediation({
-      action_type: rec.action_type as any,
+      action_type: rec.action_type as RemediationAction['action_type'],
       trigger_type: 'manual',
       reason: `Aplicação da sugestão de melhoria: ${rec.title}`,
       executed_by: executedBy,

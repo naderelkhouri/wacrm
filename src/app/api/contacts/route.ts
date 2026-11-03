@@ -73,8 +73,46 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    const contacts = (data || []) as any[];
+    if (contacts.length > 0) {
+      const contactIds = contacts.map((c) => c.id);
+      const { data: ctData } = await supabase
+        .from('contact_tags')
+        .select('contact_id, tag_id')
+        .in('contact_id', contactIds);
+
+      if (ctData && ctData.length > 0) {
+        const tagIds = Array.from(new Set(ctData.map((ct) => ct.tag_id)));
+        const { data: tagsData } = await supabase
+          .from('tags')
+          .select('id, name, color, user_id, created_at')
+          .in('id', tagIds);
+
+        const tagsMap: Record<string, any> = {};
+        tagsData?.forEach((t) => {
+          tagsMap[t.id] = t;
+        });
+
+        const tagsByContact: Record<string, any[]> = {};
+        ctData.forEach((ct) => {
+          if (!tagsByContact[ct.contact_id]) tagsByContact[ct.contact_id] = [];
+          if (tagsMap[ct.tag_id]) {
+            tagsByContact[ct.contact_id].push(tagsMap[ct.tag_id]);
+          }
+        });
+
+        contacts.forEach((c) => {
+          c.tags = tagsByContact[c.id] || [];
+        });
+      } else {
+        contacts.forEach((c) => {
+          c.tags = [];
+        });
+      }
+    }
+
     return NextResponse.json({
-      contacts: data || [],
+      contacts,
       totalCount: count || 0,
       source: 'supabase',
     });

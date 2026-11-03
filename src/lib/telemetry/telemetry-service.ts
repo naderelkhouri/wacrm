@@ -277,17 +277,14 @@ export function getTelemetryMetricsSnapshot(): TelemetryMetricsSnapshot {
   let memoryPercent = 0;
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const v8 = require('v8');
-    const stats = v8.getHeapStatistics();
-    memoryUsedMb = Math.round(stats.used_heap_size / (1024 * 1024));
-    memoryTotalMb = Math.round(stats.heap_size_limit / (1024 * 1024)) || 1200;
-    memoryPercent = Math.min(100, Math.round((memoryUsedMb / memoryTotalMb) * 100));
+    if (typeof process !== 'undefined' && typeof process.memoryUsage === 'function') {
+      const mem = process.memoryUsage();
+      memoryUsedMb = Math.round((mem.heapUsed || 0) / (1024 * 1024));
+      memoryTotalMb = Math.round((mem.heapTotal || 0) / (1024 * 1024)) || 1200;
+      memoryPercent = Math.min(100, Math.round((memoryUsedMb / memoryTotalMb) * 100));
+    }
   } catch {
-    const mem = process.memoryUsage ? process.memoryUsage() : { heapUsed: 0, heapTotal: 0 };
-    memoryUsedMb = Math.round((mem.heapUsed || 0) / (1024 * 1024));
-    memoryTotalMb = Math.round((mem.heapTotal || 0) / (1024 * 1024)) || 1200;
-    memoryPercent = Math.min(100, Math.round((memoryUsedMb / memoryTotalMb) * 100));
+    // Ignore memory inspection failure
   }
 
   return {

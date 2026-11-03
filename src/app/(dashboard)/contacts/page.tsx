@@ -56,7 +56,7 @@ import { ImportModal } from '@/components/contacts/import-modal';
 import { CustomFieldsManager } from '@/components/contacts/custom-fields-manager';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 
 const PAGE_SIZE = 25;
 
@@ -66,6 +66,7 @@ interface ContactWithTags extends Contact {
 
 export default function ContactsPage() {
   const t = useTranslations('Contacts.page');
+  const locale = useLocale();
   const supabase = createClient();
   const canEdit = useCan('send-messages');
   const canEditSettings = useCan('edit-settings');
@@ -130,26 +131,28 @@ export default function ContactsPage() {
     const to = from + PAGE_SIZE - 1;
     const term = search.trim();
 
-    // 1. Try unified contacts API endpoint (Django DRF / server-side)
-    try {
-      const sp = new URLSearchParams();
-      if (term) sp.set('search', term);
-      sp.set('limit', String(PAGE_SIZE));
-      sp.set('offset', String(from));
+    // 1. Try unified contacts API endpoint (Django DRF / server-side) only if no tag filter is active
+    if (selectedTagIds.length === 0) {
+      try {
+        const sp = new URLSearchParams();
+        if (term) sp.set('search', term);
+        sp.set('limit', String(PAGE_SIZE));
+        sp.set('offset', String(from));
 
-      const apiRes = await fetch(`/api/contacts?${sp.toString()}`);
-      if (apiRes.ok) {
-        const json = await apiRes.json();
-        if (seq !== fetchSeq.current) return;
-        if (json.contacts) {
-          setContacts(json.contacts);
-          setTotalCount(json.totalCount || 0);
-          setLoading(false);
-          return;
+        const apiRes = await fetch(`/api/contacts?${sp.toString()}`);
+        if (apiRes.ok) {
+          const json = await apiRes.json();
+          if (seq !== fetchSeq.current) return;
+          if (json.source === 'django' && json.contacts) {
+            setContacts(json.contacts);
+            setTotalCount(json.totalCount || 0);
+            setLoading(false);
+            return;
+          }
         }
+      } catch {
+        // Ignore and proceed to client-side Supabase query fallback
       }
-    } catch {
-      // Ignore and proceed to client-side Supabase query fallback
     }
 
     let contactRows: Contact[];
@@ -662,7 +665,7 @@ export default function ContactsPage() {
                     </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-xs hidden lg:table-cell">
-                    {new Date(contact.created_at).toLocaleDateString('en-US', {
+                    {new Date(contact.created_at).toLocaleDateString(locale, {
                       month: 'short',
                       day: 'numeric',
                       year: 'numeric',

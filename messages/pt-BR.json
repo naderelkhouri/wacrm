@@ -1682,5 +1682,75 @@
       "reindexTooltip": "Re-embed all documents (e.g. after adding an embeddings key)",
       "loading": "Loading…"
     }
+  },
+  "Notifications": {
+    "title": "Notificações",
+    "description": "Conversas atribuídas a você por outros membros da equipe aparecem aqui.",
+    "markAllRead": "Marcar todas como lidas",
+    "toastMarkReadError": "Falha ao marcar notificação como lida",
+    "toastMarkAllError": "Falha ao marcar todas como lidas",
+    "emptyTitle": "Nenhuma notificação por enquanto",
+    "emptyHint": "Você verá um alerta aqui quando alguém atribuir uma conversa a você.",
+    "unread": "Não lida",
+    "retry": "Tentar novamente"
+  },
+  "Agents": {
+    "title": "Agentes de IA",
+    "description": "Seu agente de inteligência artificial com sua própria chave — configure, depois teste no playground antes de responder clientes.",
+    "tabPlayground": "Playground",
+    "tabSetup": "Configuração",
+    "tabUsage": "Uso & Métricas"
+  },
+  "SignupPage": {
+    "titleAccept": "Criar conta e aceitar convite",
+    "title": "Criar conta",
+    "descAccept": "Confirme seu e-mail para aceitar o convite e entrar na sua equipe.",
+    "desc": "Comece a usar o CRM WhatsApp",
+    "fullNameLabel": "Nome Completo",
+    "fullNamePlaceholder": "Seu nome",
+    "emailLabel": "E-mail",
+    "emailPlaceholder": "seu@exemplo.com",
+    "passwordLabel": "Senha",
+    "passwordPlaceholder": "Pelo menos 6 caracteres",
+    "confirmPasswordLabel": "Confirmar Senha",
+    "confirmPasswordPlaceholder": "Repita sua senha",
+    "passwordsDoNotMatch": "As senhas não coincidem",
+    "passwordTooShort": "A senha deve ter pelo menos 6 caracteres",
+    "creatingAccount": "Criando conta...",
+    "createAccount": "Criar conta",
+    "alreadyHaveAccount": "Já tem uma conta?",
+    "signIn": "Entrar",
+    "checkEmailTitle": "Verifique seu e-mail",
+    "checkEmailDesc": "Enviamos um link de confirmação para {email}. Por favor, verifique sua caixa de entrada e clique no link para ativar sua conta.",
+    "backToSignIn": "Voltar para o login"
+  },
+  "ForgotPasswordPage": {
+    "title": "Recuperar senha",
+    "description": "Digite seu e-mail e enviaremos um link de recuperação",
+    "emailLabel": "E-mail",
+    "emailPlaceholder": "seu@exemplo.com",
+    "sending": "Enviando...",
+    "sendResetLink": "Enviar link de recuperação",
+    "backToSignIn": "Voltar para o login",
+    "checkEmailTitle": "Verifique seu e-mail",
+    "checkEmailDesc": "Enviamos um link de recuperação de senha para {email}. Por favor, verifique sua caixa de entrada."
+  },
+  "ResetPasswordPage": {
+    "title": "Definir nova senha",
+    "description": "Digite sua nova senha abaixo",
+    "passwordLabel": "Nova Senha",
+    "passwordPlaceholder": "Pelo menos 6 caracteres",
+    "confirmPasswordLabel": "Confirmar Nova Senha",
+    "confirmPasswordPlaceholder": "Repita a nova senha",
+    "passwordsDoNotMatch": "As senhas não coincidem",
+    "passwordTooShort": "A senha deve ter pelo menos 6 caracteres",
+    "updating": "Atualizando senha...",
+    "updatePassword": "Salvar nova senha",
+    "successTitle": "Senha redefinida com sucesso",
+    "successDesc": "Sua senha foi atualizada. Agora você pode entrar com sua nova senha.",
+    "continueToApp": "Ir para o Painel",
+    "invalidLinkTitle": "Link expirado ou inválido",
+    "invalidLinkDesc": "Este link de recuperação expirou ou não é válido. Solicite um novo link.",
+    "requestNewLink": "Solicitar novo link"
   }
 }

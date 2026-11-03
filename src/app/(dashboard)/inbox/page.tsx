@@ -171,9 +171,23 @@ function InboxPageInner() {
     }
   }, []);
 
-  // Check WhatsApp connection status on mount
+  // Check WhatsApp connection status on mount (Meta, Uazapi, or Global Platform WhatsApp)
   useEffect(() => {
+    let cancelled = false;
     const checkConnection = async () => {
+      try {
+        const res = await fetch("/api/whatsapp/config");
+        if (res.ok) {
+          const json = await res.json();
+          if (!cancelled) {
+            setWhatsappConnected(Boolean(json.connected));
+            return;
+          }
+        }
+      } catch {
+        // Fallback to supabase direct query
+      }
+
       const supabase = createClient();
       const {
         data: { session },
@@ -182,12 +196,6 @@ function InboxPageInner() {
 
       if (!user) return;
 
-      // whatsapp_config is one-row-per-account post-multi-user, so
-      // the previous `.eq('user_id', user.id)` would miss the row
-      // for any teammate who didn't personally save the config —
-      // the "WhatsApp not connected" banner would show in the
-      // shared inbox even though the admin had it configured.
-      // Resolve account_id via the profile and query by that.
       const { data: profile } = await supabase
         .from("profiles")
         .select("account_id")
@@ -195,7 +203,7 @@ function InboxPageInner() {
         .maybeSingle();
       const accountId = profile?.account_id as string | undefined;
       if (!accountId) {
-        setWhatsappConnected(false);
+        if (!cancelled) setWhatsappConnected(false);
         return;
       }
 
@@ -205,10 +213,13 @@ function InboxPageInner() {
         .eq("account_id", accountId)
         .maybeSingle();
 
-      setWhatsappConnected(data?.status === "connected");
+      if (!cancelled) setWhatsappConnected(data?.status === "connected");
     };
 
     checkConnection();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Handle realtime message events
