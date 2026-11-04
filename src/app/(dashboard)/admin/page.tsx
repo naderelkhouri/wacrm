@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import {
@@ -111,6 +112,7 @@ interface PlatformSettings {
 
 export default function AdminPage() {
   const router = useRouter();
+  const t = useTranslations("Admin");
   const { user, isSuperAdmin, loading: authLoading } = useAuth();
 
   // Overview State
@@ -151,11 +153,11 @@ export default function AdminPage() {
       setMetrics(data.metrics);
     } catch (err: unknown) {
       console.error(err);
-      toast.error("Erro ao carregar métricas da plataforma.");
+      toast.error(t("errLoadOverview"));
     } finally {
       setLoadingMetrics(false);
     }
-  }, []);
+  }, [t]);
 
   // Load Tenants Data
   const fetchTenants = useCallback(async () => {
@@ -169,11 +171,11 @@ export default function AdminPage() {
       setTenants(data.tenants || []);
     } catch (err: unknown) {
       console.error(err);
-      toast.error("Erro ao carregar empresas.");
+      toast.error(t("errLoadTenants"));
     } finally {
       setLoadingTenants(false);
     }
-  }, [searchQuery]);
+  }, [searchQuery, t]);
 
   // Load Transactions Data
   const fetchTransactions = useCallback(async () => {
@@ -185,11 +187,11 @@ export default function AdminPage() {
       setTransactions(data.transactions || []);
     } catch (err: unknown) {
       console.error(err);
-      toast.error("Erro ao carregar transações.");
+      toast.error(t("errLoadTransactions"));
     } finally {
       setLoadingTransactions(false);
     }
-  }, []);
+  }, [t]);
 
   // Load Platform Settings
   const fetchSettings = useCallback(async () => {
@@ -201,9 +203,9 @@ export default function AdminPage() {
       setSelectedSignupMode(data.mode);
     } catch (err: unknown) {
       console.error(err);
-      toast.error("Erro ao carregar configurações globais.");
+      toast.error(t("errLoadSettings"));
     }
-  }, []);
+  }, [t]);
 
   // Initial load
   useEffect(() => {
@@ -236,13 +238,13 @@ export default function AdminPage() {
         throw new Error(errData.error || "Falha ao salvar alterações.");
       }
 
-      toast.success(`Assinatura e limites de ${selectedTenant.name} atualizados com sucesso!`);
+      toast.success(t("tenantUpdated", { name: selectedTenant.name }));
       setSelectedTenant(null);
       fetchTenants();
       fetchOverview();
     } catch (err: unknown) {
       console.error(err);
-      toast.error(err instanceof Error ? err.message : "Erro ao atualizar empresa.");
+      toast.error(err instanceof Error ? err.message : t("errLoadTenants"));
     } finally {
       setSavingTenant(false);
     }
@@ -263,12 +265,12 @@ export default function AdminPage() {
         throw new Error(errData.error || "Falha ao atualizar modo de cadastro.");
       }
 
-      toast.success("Modo global de cadastro atualizado com sucesso!");
+      toast.success(t("signupModeUpdated"));
       fetchSettings();
       fetchOverview();
     } catch (err: unknown) {
       console.error(err);
-      toast.error(err instanceof Error ? err.message : "Erro ao atualizar configuração.");
+      toast.error(err instanceof Error ? err.message : t("errLoadSettings"));
     } finally {
       setSavingSettings(false);
     }
@@ -320,19 +322,19 @@ export default function AdminPage() {
             <div className="flex items-center gap-3">
               <ShieldAlert className="h-8 w-8 text-red-500" />
               <div>
-                <CardTitle className="text-xl text-red-600">Acesso Restrito</CardTitle>
+                <CardTitle className="text-xl text-red-600">{t("accessRestricted")}</CardTitle>
                 <CardDescription>
-                  Esta área é restrita aos Super Administradores da plataforma CRM WhatsApp.
+                  {t("accessRestrictedDesc")}
                 </CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Seu usuário atual ({user?.email}) não possui a permissão de Super Admin (`is_super_admin: true`).
+              {t("noSuperAdminPermission", { email: user?.email || "" })}
             </p>
             <Button variant="outline" onClick={() => router.push("/dashboard")}>
-              Voltar para o Painel
+              {t("backToDashboard")}
             </Button>
           </CardContent>
         </Card>
@@ -347,15 +349,15 @@ export default function AdminPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-foreground">
-              Área Master da Plataforma
+              {t("title")}
             </h1>
             <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-500 font-semibold gap-1">
               <ShieldAlert className="h-3.5 w-3.5" />
-              Super Admin
+              {t("superAdminBadge")}
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
-            Gestão multi-tenant, controle de assinaturas PagBank e governança de cadastros.
+            {t("subtitle")}
           </p>
         </div>
 
@@ -368,12 +370,12 @@ export default function AdminPage() {
               fetchTenants();
               fetchTransactions();
               fetchSettings();
-              toast.info("Dados da plataforma atualizados.");
+              toast.info(t("dataRefreshed"));
             }}
             className="gap-2"
           >
             <RefreshCw className="h-4 w-4" />
-            Atualizar
+            {t("refresh")}
           </Button>
         </div>
       </div>
@@ -383,7 +385,7 @@ export default function AdminPage() {
         {/* Total Tenants */}
         <Card className="border-border bg-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Empresas Cadastradas</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("tenantsKpiTitle")}</CardTitle>
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -393,12 +395,16 @@ export default function AdminPage() {
             <p className="text-xs text-muted-foreground mt-1">
               {metrics ? (
                 <>
-                  <span className="text-emerald-500 font-semibold">{metrics.active_subscriptions} ativas</span>
+                  <span className="text-emerald-500 font-semibold">
+                    {t("activeCount", { count: metrics.active_subscriptions })}
+                  </span>
                   {" · "}
-                  <span className="text-blue-500">{metrics.trialing_subscriptions} em teste</span>
+                  <span className="text-blue-500">
+                    {t("trialingCount", { count: metrics.trialing_subscriptions })}
+                  </span>
                 </>
               ) : (
-                "Carregando..."
+                t("loading")
               )}
             </p>
           </CardContent>
@@ -407,7 +413,7 @@ export default function AdminPage() {
         {/* MRR */}
         <Card className="border-border bg-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">MRR Estimado</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("mrrKpiTitle")}</CardTitle>
             <TrendingUp className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
@@ -415,7 +421,7 @@ export default function AdminPage() {
               {loadingMetrics ? "..." : formatMoney(metrics?.mrr_cents || 0)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Receita mensal recorrente contratada
+              {t("mrrKpiDesc")}
             </p>
           </CardContent>
         </Card>
@@ -423,7 +429,7 @@ export default function AdminPage() {
         {/* Total Revenue */}
         <Card className="border-border bg-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Receita PagBank Total</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("revenueKpiTitle")}</CardTitle>
             <DollarSign className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
@@ -431,7 +437,7 @@ export default function AdminPage() {
               {loadingMetrics ? "..." : formatMoney(metrics?.total_revenue_cents || 0)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Total liquidado via PagBank Sandbox / Prod
+              {t("revenueKpiDesc")}
             </p>
           </CardContent>
         </Card>
@@ -439,16 +445,18 @@ export default function AdminPage() {
         {/* WhatsApp & Volume */}
         <Card className="border-border bg-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Volume & WhatsApp</CardTitle>
+            <CardTitle className="text-sm font-medium">{t("volumeKpiTitle")}</CardTitle>
             <Radio className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
               {loadingMetrics ? "..." : metrics?.total_whatsapp_connected ?? 0}{" "}
-              <span className="text-sm font-normal text-muted-foreground">instâncias</span>
+              <span className="text-sm font-normal text-muted-foreground">
+                {t("instancesCount", { count: "" }).trim()}
+              </span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {metrics ? `${metrics.total_contacts} contatos · ${metrics.total_messages} msgs` : "..."}
+              {metrics ? t("volumeStats", { contacts: metrics.total_contacts, messages: metrics.total_messages }) : "..."}
             </p>
           </CardContent>
         </Card>
@@ -459,23 +467,23 @@ export default function AdminPage() {
         <TabsList className="bg-muted/60">
           <TabsTrigger value="tenants" className="gap-2">
             <Building2 className="h-4 w-4" />
-            Empresas & Assinaturas ({filteredTenants.length})
+            {t("tabTenants", { count: filteredTenants.length })}
           </TabsTrigger>
           <TabsTrigger value="transactions" className="gap-2">
             <CreditCard className="h-4 w-4" />
-            Transações PagBank ({transactions.length})
+            {t("tabTransactions", { count: transactions.length })}
           </TabsTrigger>
           <TabsTrigger value="global-whatsapp" className="gap-2">
             <Radio className="h-4 w-4 text-emerald-500" />
-            Conexão WhatsApp Global
+            {t("tabGlobalWhatsapp")}
           </TabsTrigger>
           <TabsTrigger value="telemetry" className="gap-2">
             <Activity className="h-4 w-4 text-emerald-500" />
-            Telemetria & Auto-Cura
+            {t("tabTelemetry")}
           </TabsTrigger>
           <TabsTrigger value="governance" className="gap-2">
             <Settings className="h-4 w-4" />
-            Governança da Plataforma
+            {t("tabGovernance")}
           </TabsTrigger>
         </TabsList>
 
@@ -485,9 +493,9 @@ export default function AdminPage() {
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <CardTitle>Empresas & Organizações</CardTitle>
+                  <CardTitle>{t("tenantsTitle")}</CardTitle>
                   <CardDescription>
-                    Gerencie o plano, limite de membros e status de cada tenant do sistema.
+                    {t("tenantsDesc")}
                   </CardDescription>
                 </div>
 
@@ -497,7 +505,7 @@ export default function AdminPage() {
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                       type="search"
-                      placeholder="Buscar por nome ou e-mail..."
+                      placeholder={t("searchPlaceholder")}
                       className="pl-8 text-sm"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
@@ -506,23 +514,23 @@ export default function AdminPage() {
 
                   <Select value={statusFilter} onValueChange={(val) => setStatusFilter(val ?? "all")}>
                     <SelectTrigger className="w-32 text-xs">
-                      <SelectValue placeholder="Status" />
+                      <SelectValue placeholder={t("statusPlaceholder")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todos Status</SelectItem>
-                      <SelectItem value="active">Ativo</SelectItem>
-                      <SelectItem value="trialing">Em Teste</SelectItem>
-                      <SelectItem value="past_due">Atrasado</SelectItem>
-                      <SelectItem value="canceled">Cancelado</SelectItem>
+                      <SelectItem value="all">{t("allStatuses")}</SelectItem>
+                      <SelectItem value="active">{t("statusActive")}</SelectItem>
+                      <SelectItem value="trialing">{t("statusTrialing")}</SelectItem>
+                      <SelectItem value="past_due">{t("statusPastDue")}</SelectItem>
+                      <SelectItem value="canceled">{t("statusCanceled")}</SelectItem>
                     </SelectContent>
                   </Select>
 
                   <Select value={planFilter} onValueChange={(val) => setPlanFilter(val ?? "all")}>
                     <SelectTrigger className="w-32 text-xs">
-                      <SelectValue placeholder="Plano" />
+                      <SelectValue placeholder={t("planPlaceholder")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todos Planos</SelectItem>
+                      <SelectItem value="all">{t("allPlans")}</SelectItem>
                       <SelectItem value="free">Free</SelectItem>
                       <SelectItem value="starter">Starter</SelectItem>
                       <SelectItem value="pro">Pro</SelectItem>
@@ -540,44 +548,44 @@ export default function AdminPage() {
               ) : filteredTenants.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
                   <Building2 className="h-10 w-10 mb-2 opacity-50" />
-                  <p>Nenhuma empresa encontrada com os filtros aplicados.</p>
+                  <p>{t("noTenantsFound")}</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Empresa</TableHead>
-                        <TableHead>Proprietário</TableHead>
-                        <TableHead>Plano</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Limite Assentos</TableHead>
-                        <TableHead>Criada em</TableHead>
-                        <TableHead className="text-right">Ação</TableHead>
+                        <TableHead>{t("tableCompany")}</TableHead>
+                        <TableHead>{t("tableOwner")}</TableHead>
+                        <TableHead>{t("tablePlan")}</TableHead>
+                        <TableHead>{t("tableStatus")}</TableHead>
+                        <TableHead>{t("tableSeatLimit")}</TableHead>
+                        <TableHead>{t("tableCreatedAt")}</TableHead>
+                        <TableHead className="text-right">{t("tableAction")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredTenants.map((t) => {
-                        const status = t.subscription?.status || "none";
-                        const planId = t.subscription?.plan_id || "free";
-                        const planName = t.subscription?.plan?.name || planId.toUpperCase();
+                      {filteredTenants.map((tItem) => {
+                        const status = tItem.subscription?.status || "none";
+                        const planId = tItem.subscription?.plan_id || "free";
+                        const planName = tItem.subscription?.plan?.name || planId.toUpperCase();
 
                         return (
-                          <TableRow key={t.id}>
+                          <TableRow key={tItem.id}>
                             <TableCell className="font-medium">
                               <div>
-                                <span className="font-semibold text-foreground">{t.name}</span>
+                                <span className="font-semibold text-foreground">{tItem.name}</span>
                                 <span className="block text-[11px] text-muted-foreground font-mono truncate max-w-[140px]">
-                                  {t.id}
+                                  {tItem.id}
                                 </span>
                               </div>
                             </TableCell>
 
                             <TableCell>
                               <div>
-                                <span className="text-sm">{t.owner?.full_name || "Sem nome"}</span>
+                                <span className="text-sm">{tItem.owner?.full_name || t("noName")}</span>
                                 <span className="block text-xs text-muted-foreground">
-                                  {t.owner?.email || "Sem e-mail"}
+                                  {tItem.owner?.email || t("noEmail")}
                                 </span>
                               </div>
                             </TableCell>
@@ -591,48 +599,48 @@ export default function AdminPage() {
                             <TableCell>
                               {status === "active" && (
                                 <Badge className="bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/20 border-emerald-500/30">
-                                  Ativo
+                                  {t("statusActive")}
                                 </Badge>
                               )}
                               {status === "trialing" && (
                                 <Badge className="bg-blue-500/15 text-blue-500 hover:bg-blue-500/20 border-blue-500/30">
-                                  Em Teste
+                                  {t("statusTrialing")}
                                 </Badge>
                               )}
                               {status === "past_due" && (
                                 <Badge className="bg-amber-500/15 text-amber-500 hover:bg-amber-500/20 border-amber-500/30">
-                                  Atrasado
+                                  {t("statusPastDue")}
                                 </Badge>
                               )}
                               {status === "canceled" && (
                                 <Badge className="bg-red-500/15 text-red-500 hover:bg-red-500/20 border-red-500/30">
-                                  Cancelado
+                                  {t("statusCanceled")}
                                 </Badge>
                               )}
                               {status === "none" && (
-                                <Badge variant="secondary">Sem Assinatura</Badge>
+                                <Badge variant="secondary">{t("statusNone")}</Badge>
                               )}
                             </TableCell>
 
                             <TableCell>
                               <span className="text-sm font-medium">
-                                {t.max_members || 5} membros
+                                {t("membersCount", { count: tItem.max_members || 5 })}
                               </span>
                             </TableCell>
 
                             <TableCell className="text-xs text-muted-foreground">
-                              {new Date(t.created_at).toLocaleDateString("pt-BR")}
+                              {new Date(tItem.created_at).toLocaleDateString()}
                             </TableCell>
 
                             <TableCell className="text-right">
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => openTenantDialog(t)}
+                                onClick={() => openTenantDialog(tItem)}
                                 className="h-8 gap-1.5 text-xs"
                               >
                                 <Sliders className="h-3.5 w-3.5" />
-                                Gerenciar
+                                {t("manage")}
                               </Button>
                             </TableCell>
                           </TableRow>
@@ -650,9 +658,9 @@ export default function AdminPage() {
         <TabsContent value="transactions" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Histórico de Pagamentos PagBank</CardTitle>
+              <CardTitle>{t("txHistoryTitle")}</CardTitle>
               <CardDescription>
-                Transações processadas via checkout Pix e Cartão pela integração PagBank Sandbox.
+                {t("txHistoryDesc")}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -663,19 +671,19 @@ export default function AdminPage() {
               ) : transactions.length === 0 ? (
                 <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
                   <CreditCard className="h-10 w-10 mb-2 opacity-50" />
-                  <p>Nenhuma transação registrada até o momento.</p>
+                  <p>{t("noTxFound")}</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Transação / ID</TableHead>
-                        <TableHead>Empresa</TableHead>
-                        <TableHead>Valor</TableHead>
-                        <TableHead>Método</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Data</TableHead>
+                        <TableHead>{t("tableTxId")}</TableHead>
+                        <TableHead>{t("tableCompany")}</TableHead>
+                        <TableHead>{t("tableTxAmount")}</TableHead>
+                        <TableHead>{t("tableTxMethod")}</TableHead>
+                        <TableHead>{t("tableStatus")}</TableHead>
+                        <TableHead>{t("tableTxDate")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -688,7 +696,7 @@ export default function AdminPage() {
 
                           <TableCell>
                             <span className="text-sm font-medium">
-                              {tx.account?.name || "Empresa Desconhecida"}
+                              {tx.account?.name || t("unknownCompany")}
                             </span>
                           </TableCell>
 
@@ -705,11 +713,11 @@ export default function AdminPage() {
                           <TableCell>
                             {tx.status === "PAID" ? (
                               <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/30">
-                                PAGO
+                                {t("txStatusPaid")}
                               </Badge>
                             ) : tx.status === "WAITING" ? (
                               <Badge className="bg-amber-500/15 text-amber-500 border-amber-500/30">
-                                AGUARDANDO
+                                {t("txStatusWaiting")}
                               </Badge>
                             ) : (
                               <Badge variant="secondary">{tx.status}</Badge>
@@ -717,7 +725,7 @@ export default function AdminPage() {
                           </TableCell>
 
                           <TableCell className="text-xs text-muted-foreground">
-                            {new Date(tx.created_at).toLocaleString("pt-BR")}
+                            {new Date(tx.created_at).toLocaleString()}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -737,10 +745,10 @@ export default function AdminPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <UserCheck className="h-5 w-5 text-primary" />
-                  Controle Global de Novos Cadastros
+                  {t("signupControlTitle")}
                 </CardTitle>
                 <CardDescription>
-                  Defina se novos visitantes podem se cadastrar livremente ou se a plataforma está fechada.
+                  {t("signupControlDesc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -748,14 +756,13 @@ export default function AdminPage() {
                   <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-500 flex items-start gap-2">
                     <Lock className="h-4 w-4 shrink-0 mt-0.5" />
                     <span>
-                      O modo está atualmente travado via variável de ambiente (<code>SIGNUP_MODE</code>).
-                      Para alterar dinamicamente, remova a variável estática do ambiente.
+                      {t("signupLockedNotice")}
                     </span>
                   </div>
                 )}
 
                 <div className="space-y-2">
-                  <Label>Modo de Cadastro</Label>
+                  <Label>{t("signupModeLabel")}</Label>
                   <Select
                     value={selectedSignupMode}
                     onValueChange={(val) => {
@@ -772,19 +779,19 @@ export default function AdminPage() {
                       <SelectItem value="open">
                         <div className="flex items-center gap-2">
                           <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                          <span>Aberto (Qualquer visitante pode criar conta)</span>
+                          <span>{t("modeOpen")}</span>
                         </div>
                       </SelectItem>
                       <SelectItem value="invite_only">
                         <div className="flex items-center gap-2">
                           <Clock className="h-4 w-4 text-blue-500" />
-                          <span>Apenas Convite (Apenas membros convidados)</span>
+                          <span>{t("modeInviteOnly")}</span>
                         </div>
                       </SelectItem>
                       <SelectItem value="closed">
                         <div className="flex items-center gap-2">
                           <XCircle className="h-4 w-4 text-red-500" />
-                          <span>Fechado (Novos cadastros totalmente bloqueados)</span>
+                          <span>{t("modeClosed")}</span>
                         </div>
                       </SelectItem>
                     </SelectContent>
@@ -798,7 +805,7 @@ export default function AdminPage() {
                     className="gap-2"
                   >
                     {savingSettings && <RefreshCw className="h-4 w-4 animate-spin" />}
-                    Salvar Política de Cadastro
+                    {t("saveSignupPolicy")}
                   </Button>
                 </div>
               </CardContent>
@@ -809,10 +816,10 @@ export default function AdminPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <ShieldAlert className="h-5 w-5 text-amber-500" />
-                  Status da Infraestrutura
+                  {t("infraStatusTitle")}
                 </CardTitle>
                 <CardDescription>
-                  Visão dos serviços centrais da plataforma em produção.
+                  {t("infraStatusDesc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -821,7 +828,7 @@ export default function AdminPage() {
                     <p className="text-sm font-semibold">PostgreSQL (core-db)</p>
                     <p className="text-xs text-muted-foreground">178.156.202.55 · Supabase Multi-Tenant</p>
                   </div>
-                  <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/30">Operacional</Badge>
+                  <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/30">{t("statusOperational")}</Badge>
                 </div>
 
                 <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
@@ -829,7 +836,7 @@ export default function AdminPage() {
                     <p className="text-sm font-semibold">App Node / Next.js (wacrm_app)</p>
                     <p className="text-xs text-muted-foreground">5.161.30.120 · Docker Swarm</p>
                   </div>
-                  <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/30">Ativo</Badge>
+                  <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/30">{t("statusActiveBadge")}</Badge>
                 </div>
 
                 <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
@@ -837,15 +844,15 @@ export default function AdminPage() {
                     <p className="text-sm font-semibold">Gateway PagBank (PagSeguro)</p>
                     <p className="text-xs text-muted-foreground">Progredindosempre Sandbox · Pix Checkout</p>
                   </div>
-                  <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/30">Conectado</Badge>
+                  <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/30">{t("statusConnected")}</Badge>
                 </div>
 
                 <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
                   <div>
                     <p className="text-sm font-semibold">Serviço VoIP</p>
-                    <p className="text-xs text-muted-foreground">Chamadas de voz desativadas (503 Service Unavailable)</p>
+                    <p className="text-xs text-muted-foreground">{t("voipDesc")}</p>
                   </div>
-                  <Badge variant="outline" className="text-muted-foreground">Desativado</Badge>
+                  <Badge variant="outline" className="text-muted-foreground">{t("statusDisabled")}</Badge>
                 </div>
               </CardContent>
             </Card>
@@ -867,47 +874,47 @@ export default function AdminPage() {
       <Dialog open={!!selectedTenant} onOpenChange={(open) => !open && setSelectedTenant(null)}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Gerenciar Empresa: {selectedTenant?.name}</DialogTitle>
+            <DialogTitle>{t("manageTenantTitle", { name: selectedTenant?.name || "" })}</DialogTitle>
             <DialogDescription>
-              Substituição manual de plano, status de assinatura e quota de assentos para este tenant.
+              {t("manageTenantDesc")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label>Plano de Assinatura</Label>
+              <Label>{t("planLabel")}</Label>
               <Select value={editPlan} onValueChange={(val) => setEditPlan(val ?? "starter")}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="free">Free (Gratuito)</SelectItem>
-                  <SelectItem value="starter">Starter (R$ 97/mês)</SelectItem>
-                  <SelectItem value="pro">Pro (R$ 197/mês)</SelectItem>
-                  <SelectItem value="enterprise">Enterprise (R$ 397/mês)</SelectItem>
+                  <SelectItem value="free">Free</SelectItem>
+                  <SelectItem value="starter">Starter</SelectItem>
+                  <SelectItem value="pro">Pro</SelectItem>
+                  <SelectItem value="enterprise">Enterprise</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-1.5">
-              <Label>Status da Assinatura</Label>
+              <Label>{t("subscriptionStatusLabel")}</Label>
               <Select value={editStatus} onValueChange={(val) => setEditStatus(val ?? "active")}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="active">Ativo (Acesso Liberado)</SelectItem>
-                  <SelectItem value="trialing">Em Teste (Trial Ativo)</SelectItem>
-                  <SelectItem value="past_due">Atrasado (Pagamento Pendente)</SelectItem>
-                  <SelectItem value="canceled">Cancelado (Acesso Bloqueado)</SelectItem>
-                  <SelectItem value="unpaid">Não Pago</SelectItem>
+                  <SelectItem value="active">{t("statusActive")}</SelectItem>
+                  <SelectItem value="trialing">{t("statusTrialing")}</SelectItem>
+                  <SelectItem value="past_due">{t("statusPastDue")}</SelectItem>
+                  <SelectItem value="canceled">{t("statusCanceled")}</SelectItem>
+                  <SelectItem value="unpaid">{t("statusUnpaid")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label>Limite de Membros (Assentos)</Label>
+                <Label>{t("memberLimitLabel")}</Label>
                 <Input
                   type="number"
                   min="1"
@@ -918,7 +925,7 @@ export default function AdminPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label>Bônus de Dias (+Dias)</Label>
+                <Label>{t("daysToAddLabel")}</Label>
                 <Input
                   type="number"
                   min="0"
@@ -927,18 +934,18 @@ export default function AdminPage() {
                   value={editDaysToAdd || ""}
                   onChange={(e) => setEditDaysToAdd(Number(e.target.value) || 0)}
                 />
-                <p className="text-[10px] text-muted-foreground">Estende o current_period_end</p>
+                <p className="text-[10px] text-muted-foreground">{t("daysToAddHint")}</p>
               </div>
             </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setSelectedTenant(null)} disabled={savingTenant}>
-              Cancelar
+              {t("cancel")}
             </Button>
             <Button onClick={handleSaveTenant} disabled={savingTenant} className="gap-2">
               {savingTenant && <RefreshCw className="h-4 w-4 animate-spin" />}
-              Salvar Alterações
+              {t("saveChanges")}
             </Button>
           </DialogFooter>
         </DialogContent>
