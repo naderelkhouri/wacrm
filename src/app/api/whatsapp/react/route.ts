@@ -10,6 +10,7 @@ import {
   RATE_LIMITS,
 } from '@/lib/rate-limit';
 import { canSendMessages, isAccountRole, type AccountRole } from '@/lib/auth/roles';
+import { ensureAccountForUser } from '@/lib/auth/ensure-account';
 
 /**
  * POST /api/whatsapp/react
@@ -45,7 +46,17 @@ export async function POST(request: Request) {
       .select('account_id, account_role')
       .eq('user_id', user.id)
       .maybeSingle();
-    const accountId = profile?.account_id as string | undefined;
+    let accountId = profile?.account_id as string | undefined;
+    let accountRole = profile?.account_role as AccountRole | undefined;
+
+    if (!accountId || !accountRole) {
+      const healed = await ensureAccountForUser(user);
+      if (healed) {
+        accountId = healed.accountId;
+        accountRole = healed.accountRole as AccountRole;
+      }
+    }
+
     if (!accountId) {
       return NextResponse.json(
         { error: 'Your profile is not linked to an account.' },
@@ -53,7 +64,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const accountRole = profile?.account_role as AccountRole | undefined;
     if (!accountRole || !isAccountRole(accountRole) || !canSendMessages(accountRole)) {
       return NextResponse.json(
         { error: 'Forbidden: Insufficient permissions to react to messages' },

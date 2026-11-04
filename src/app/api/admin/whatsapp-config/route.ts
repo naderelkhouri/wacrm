@@ -16,6 +16,7 @@ import {
   verifyUazapiInstance,
   configureUazapiWebhook,
   normalizeUazapiBaseUrl,
+  getPublicAppOrigin,
 } from '@/lib/whatsapp/uazapi';
 
 export const dynamic = 'force-dynamic';
@@ -233,9 +234,8 @@ export async function POST(request: Request) {
     const encryptedVerifyToken = encrypt(tokenToSave);
 
     if (provider === 'uazapi' && normalizedApiUrl) {
-      const appOrigin =
-        process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
-      const webhookUrl = `${appOrigin.replace(/\/+$/, '')}/api/whatsapp/webhook?token=${encodeURIComponent(tokenToSave)}`;
+      const appOrigin = getPublicAppOrigin(request);
+      const webhookUrl = `${appOrigin}/api/whatsapp/webhook?token=${encodeURIComponent(tokenToSave)}`;
       await configureUazapiWebhook({
         apiUrl: normalizedApiUrl,
         instanceToken: plainTokenToVerify,

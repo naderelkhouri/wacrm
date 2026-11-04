@@ -25,15 +25,16 @@ export async function ensureAccountForUser(user: {
   email?: string | null;
   user_metadata?: Record<string, unknown> | null;
 }): Promise<EnsureAccountResult | null> {
-  const admin = supabaseAdmin();
-  const userId = user.id;
-  const email = (user.email || '').toLowerCase().trim();
-  const fullName =
-    (typeof user.user_metadata?.full_name === 'string' && user.user_metadata.full_name) ||
-    (typeof user.user_metadata?.name === 'string' && user.user_metadata.name) ||
-    (email ? email.split('@')[0] : 'Workspace');
-
   try {
+    const admin = supabaseAdmin();
+    if (!admin) return null;
+    const userId = user.id;
+    const email = (user.email || '').toLowerCase().trim();
+    const fullName =
+      (typeof user.user_metadata?.full_name === 'string' && user.user_metadata.full_name) ||
+      (typeof user.user_metadata?.name === 'string' && user.user_metadata.name) ||
+      (email ? email.split('@')[0] : 'Workspace');
+
     // 1. Check existing profile
     const { data: existingProfile, error: profileErr } = await admin
       .from('profiles')

@@ -11,6 +11,7 @@ import {
   SendMessageError,
 } from '@/lib/whatsapp/send-message'
 import { canSendMessages, isAccountRole, type AccountRole } from '@/lib/auth/roles'
+import { ensureAccountForUser } from '@/lib/auth/ensure-account'
 
 // The dashboard's outbound-send endpoint. It owns auth, per-user rate
 // limiting, and the two ways the UI targets a thread — an existing
@@ -53,7 +54,17 @@ export async function POST(request: Request) {
       .select('account_id, account_role')
       .eq('user_id', user.id)
       .maybeSingle()
-    const accountId = profile?.account_id as string | undefined
+    let accountId = profile?.account_id as string | undefined
+    let accountRole = profile?.account_role as AccountRole | undefined
+
+    if (!accountId || !accountRole) {
+      const healed = await ensureAccountForUser(user)
+      if (healed) {
+        accountId = healed.accountId
+        accountRole = healed.accountRole as AccountRole
+      }
+    }
+
     if (!accountId) {
       return NextResponse.json(
         { error: 'Your profile is not linked to an account.' },
@@ -61,7 +72,6 @@ export async function POST(request: Request) {
       )
     }
 
-    const accountRole = profile?.account_role as AccountRole | undefined
     if (!accountRole || !isAccountRole(accountRole) || !canSendMessages(accountRole)) {
       return NextResponse.json(
         { error: 'Forbidden: Insufficient permissions to send messages' },
@@ -199,6 +209,7 @@ export async function POST(request: Request) {
         success: true,
         message_id: result.messageId,
         whatsapp_message_id: result.whatsappMessageId,
+        conversation_id: conversationId,
       })
     } catch (err) {
       if (err instanceof SendMessageError) {

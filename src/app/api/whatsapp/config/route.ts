@@ -10,6 +10,7 @@ import {
   verifyUazapiInstance,
   configureUazapiWebhook,
   normalizeUazapiBaseUrl,
+  getPublicAppOrigin,
 } from '@/lib/whatsapp/uazapi'
 import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
 import { ensureAccountForUser } from '@/lib/auth/ensure-account'
@@ -339,10 +340,8 @@ export async function POST(request: Request) {
       const encryptedVerifyToken = encrypt(tokenToVerifyWebhook)
 
       // Auto-configure webhook on the Uazapi instance (best-effort)
-      const appOrigin =
-        process.env.NEXT_PUBLIC_APP_URL ||
-        new URL(request.url).origin
-      const webhookUrl = `${appOrigin.replace(/\/+$/, '')}/api/whatsapp/webhook?token=${encodeURIComponent(tokenToVerifyWebhook)}`
+      const appOrigin = getPublicAppOrigin(request)
+      const webhookUrl = `${appOrigin}/api/whatsapp/webhook?token=${encodeURIComponent(tokenToVerifyWebhook)}`
       await configureUazapiWebhook({
         apiUrl: normalizedApiUrl,
         instanceToken: resolvedToken,

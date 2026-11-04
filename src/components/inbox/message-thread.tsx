@@ -117,6 +117,7 @@ interface MessageThreadProps {
    */
   contactPanelOpen?: boolean;
   onToggleContactPanel?: () => void;
+  whatsappProvider?: string | null;
 }
 
 const DATE_LOCALES: Record<string, typeof ptBR> = {
@@ -186,7 +187,9 @@ export function MessageThread({
   onRefresh,
   contactPanelOpen,
   onToggleContactPanel,
+  whatsappProvider,
 }: MessageThreadProps) {
+  const isUazapi = whatsappProvider === "uazapi";
   const t = useTranslations("Inbox.messageThread");
   const tTimer = useTranslations("Inbox.sessionTimer");
   const tQuote = useTranslations("Inbox.replyQuote");
@@ -248,8 +251,11 @@ export function MessageThread({
     };
   }, []);
 
-  // 24-hour session timer
+  // 24-hour session timer (Meta Cloud API only; Uazapi has no 24h window restriction)
   const sessionInfo = useMemo(() => {
+    if (isUazapi) {
+      return { expired: false, remaining: "Uazapi • Janela livre", isUazapi: true };
+    }
     if (!messages.length) return { expired: false, remaining: "" };
 
     // Find last customer message
@@ -272,8 +278,8 @@ export function MessageThread({
         ? tTimer("xhRemaining", { hours: Math.floor(hoursLeft) })
         : tTimer("xmRemaining", { minutes: Math.floor(hoursLeft * 60) });
 
-    return { expired, remaining };
-  }, [messages, tTimer]);
+    return { expired, remaining, isUazapi: false };
+  }, [messages, tTimer, isUazapi]);
 
   // Store latest callback in a ref so fetchMessages doesn't need to
   // depend on `onMessagesLoaded` — otherwise parent re-renders cause
@@ -939,16 +945,26 @@ export function MessageThread({
           </div>
           {/* Session timer badge — hidden on the narrowest phones so
               the name + back arrow keep their room. */}
-          <Badge
-            variant="outline"
-            className={cn(
-              "ml-1 hidden gap-1 border-border text-[10px] sm:inline-flex sm:ml-2",
-              sessionInfo.expired ? "text-red-400" : "text-primary"
-            )}
-          >
-            <Clock className="h-3 w-3" />
-            {sessionInfo.remaining}
-          </Badge>
+          {isUazapi ? (
+            <Badge
+              variant="outline"
+              className="ml-1 hidden gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-[10px] sm:inline-flex sm:ml-2 font-medium"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              Uazapi Ativo • Sem limite de 24h
+            </Badge>
+          ) : (
+            <Badge
+              variant="outline"
+              className={cn(
+                "ml-1 hidden gap-1 border-border text-[10px] sm:inline-flex sm:ml-2",
+                sessionInfo.expired ? "text-red-400" : "text-primary"
+              )}
+            >
+              <Clock className="h-3 w-3" />
+              {sessionInfo.remaining}
+            </Badge>
+          )}
         </div>
 
         <div className="flex items-center gap-2">

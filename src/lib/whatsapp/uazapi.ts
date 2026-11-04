@@ -71,6 +71,31 @@ export function normalizeUazapiBaseUrl(rawUrl: string): string {
 }
 
 /**
+ * Resolves the canonical public origin URL for webhooks and callbacks.
+ * Protects against internal Docker/proxy hosts like 0.0.0.0 or localhost.
+ */
+export function getPublicAppOrigin(request?: Request): string {
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (envUrl && !envUrl.includes('0.0.0.0') && !envUrl.includes('localhost')) {
+    return envUrl.replace(/\/+$/, '');
+  }
+  if (request) {
+    const fwdHost = request.headers.get('x-forwarded-host') || request.headers.get('host');
+    const fwdProto = request.headers.get('x-forwarded-proto') || 'https';
+    if (fwdHost && !fwdHost.includes('0.0.0.0') && !fwdHost.includes('localhost')) {
+      return `${fwdProto}://${fwdHost}`.replace(/\/+$/, '');
+    }
+    try {
+      const origin = new URL(request.url).origin;
+      if (origin && !origin.includes('0.0.0.0') && !origin.includes('localhost')) {
+        return origin.replace(/\/+$/, '');
+      }
+    } catch {}
+  }
+  return 'https://wcloudapi.dev';
+}
+
+/**
  * Formats a phone number for Uazapi (digits only, e.g. "5511999998888").
  */
 export function formatPhoneForUazapi(phone: string): string {

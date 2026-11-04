@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   normalizeUazapiBaseUrl,
+  getPublicAppOrigin,
   formatPhoneForUazapi,
   verifyUazapiInstance,
   sendUazapiTextMessage,
@@ -27,6 +28,33 @@ describe('Uazapi WhatsApp Provider Client', () => {
       expect(() => normalizeUazapiBaseUrl('')).toThrow(/obrigatória/);
       expect(() => normalizeUazapiBaseUrl('not-a-url')).toThrow(/inválida/);
       expect(() => normalizeUazapiBaseUrl('ftp://example.com')).toThrow(/protocolo/);
+    });
+  });
+
+  describe('getPublicAppOrigin', () => {
+    it('returns NEXT_PUBLIC_APP_URL when set to a valid public URL', () => {
+      vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://wcloudapi.dev/');
+      expect(getPublicAppOrigin()).toBe('https://wcloudapi.dev');
+      vi.unstubAllEnvs();
+    });
+
+    it('falls back to x-forwarded-host if NEXT_PUBLIC_APP_URL is missing or local', () => {
+      vi.stubEnv('NEXT_PUBLIC_APP_URL', 'http://0.0.0.0:3000');
+      const req = new Request('http://0.0.0.0:3000/api/whatsapp/config', {
+        headers: {
+          'x-forwarded-host': 'wacrm.admx.tech',
+          'x-forwarded-proto': 'https',
+        },
+      });
+      expect(getPublicAppOrigin(req)).toBe('https://wacrm.admx.tech');
+      vi.unstubAllEnvs();
+    });
+
+    it('defaults to https://wcloudapi.dev when all inputs are local/missing', () => {
+      vi.stubEnv('NEXT_PUBLIC_APP_URL', '');
+      const req = new Request('http://localhost:3000/api/whatsapp/config');
+      expect(getPublicAppOrigin(req)).toBe('https://wcloudapi.dev');
+      vi.unstubAllEnvs();
     });
   });
 

@@ -50,6 +50,7 @@ function InboxPageInner() {
   const [whatsappConnected, setWhatsappConnected] = useState<boolean | null>(
     null
   );
+  const [whatsappProvider, setWhatsappProvider] = useState<string | null>(null);
   /**
    * Bumped whenever we want children (ConversationList, MessageThread)
    * to refetch from the DB — used as a safety net against missed
@@ -181,6 +182,7 @@ function InboxPageInner() {
           const json = await res.json();
           if (!cancelled) {
             setWhatsappConnected(Boolean(json.connected));
+            setWhatsappProvider(json.provider || (json.using_global ? "global" : null));
             return;
           }
         }
@@ -203,17 +205,23 @@ function InboxPageInner() {
         .maybeSingle();
       const accountId = profile?.account_id as string | undefined;
       if (!accountId) {
-        if (!cancelled) setWhatsappConnected(false);
+        if (!cancelled) {
+          setWhatsappConnected(false);
+          setWhatsappProvider(null);
+        }
         return;
       }
 
       const { data } = await supabase
         .from("whatsapp_config")
-        .select("status")
+        .select("status, provider")
         .eq("account_id", accountId)
         .maybeSingle();
 
-      if (!cancelled) setWhatsappConnected(data?.status === "connected");
+      if (!cancelled) {
+        setWhatsappConnected(data?.status === "connected");
+        setWhatsappProvider(data?.provider ?? null);
+      }
     };
 
     checkConnection();
@@ -511,6 +519,23 @@ function InboxPageInner() {
     router.replace("/inbox", { scroll: false });
   }, [router]);
 
+  const handleConversationCreated = useCallback(
+    async (convId: string) => {
+      await hydrateConversation(convId);
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("conversations")
+        .select(CONVERSATION_SELECT)
+        .eq("id", convId)
+        .maybeSingle();
+      if (data) {
+        const norm = normalizeConversation(data);
+        handleSelectConversation(norm);
+      }
+    },
+    [hydrateConversation, handleSelectConversation]
+  );
+
 
   const handleMessagesLoaded = useCallback((loaded: Message[]) => {
     setMessages(loaded);
@@ -600,6 +625,7 @@ function InboxPageInner() {
             conversations={conversations}
             onConversationsLoaded={handleConversationsLoaded}
             resyncToken={resyncToken}
+            onConversationCreated={handleConversationCreated}
           />
         </div>
 
@@ -623,6 +649,7 @@ function InboxPageInner() {
             conversation={activeConversation}
             contact={activeContact}
             messages={messages}
+            whatsappProvider={whatsappProvider}
             onMessagesLoaded={handleMessagesLoaded}
             onNewMessage={handleNewMessage}
             onUpdateMessage={handleUpdateMessage}
