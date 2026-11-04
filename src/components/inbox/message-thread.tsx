@@ -965,7 +965,7 @@ export function MessageThread({
               className="ml-1 hidden gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-[10px] sm:inline-flex sm:ml-2 font-medium"
             >
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              Uazapi Ativo • Sem limite de 24h
+              {t("sessionUazapiActive")}
             </Badge>
           ) : (
             <Badge

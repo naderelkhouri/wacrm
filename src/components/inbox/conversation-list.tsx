@@ -234,7 +234,7 @@ export function ConversationList({
       {/* Search + Filter */}
       <div className="space-y-2.5 border-b border-border p-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-foreground">Conversas</h2>
+          <h2 className="text-sm font-semibold text-foreground">{t("title")}</h2>
           {onConversationCreated && (
             <NewConversationDialog onSuccess={onConversationCreated} />
           )}

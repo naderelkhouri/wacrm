@@ -1,6 +1,6 @@
 "use client";
 
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Globe, Check } from "lucide-react";
 import {
   DropdownMenu,
@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 
 export function LanguageSwitcher() {
   const currentLocale = useLocale();
+  const t = useTranslations("Header");
 
   const activeLocale =
     SUPPORTED_LOCALES.find((l) => l.id === currentLocale || (currentLocale === "pt" && l.id === "pt-BR")) ||
@@ -22,7 +23,7 @@ export function LanguageSwitcher() {
     <DropdownMenu>
       <DropdownMenuTrigger
         className="flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted focus:outline-hidden"
-        aria-label="Selecionar idioma"
+        aria-label={t("selectLanguage")}
       >
         <Globe className="h-3.5 w-3.5 text-muted-foreground" />
         <span className="text-sm leading-none">{activeLocale.flag}</span>

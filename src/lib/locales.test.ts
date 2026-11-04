@@ -6,12 +6,13 @@ describe('lib/locales', () => {
     expect(DEFAULT_LOCALE).toBe('pt-BR');
   });
 
-  it('includes major languages (pt-BR, en, es, ko)', () => {
+  it('includes supported languages (pt-BR, en, es) and excludes ko', () => {
     const ids = SUPPORTED_LOCALES.map((l) => l.id);
     expect(ids).toContain('pt-BR');
     expect(ids).toContain('en');
     expect(ids).toContain('es');
-    expect(ids).toContain('ko');
+    expect(ids).not.toContain('ko');
+    expect(ids).toHaveLength(3);
   });
 
   it('has flags and native names for all locales', () => {

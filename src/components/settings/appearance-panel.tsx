@@ -37,10 +37,10 @@ export function AppearancePanel() {
       <div className="space-y-4">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <Globe className="size-4 text-muted-foreground" />
-          Idioma / Language
+          {t("languageTitle")}
         </h3>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {SUPPORTED_LOCALES.map((loc) => {
             const isActive =
               currentLocale === loc.id || (currentLocale === "pt" && loc.id === "pt-BR");

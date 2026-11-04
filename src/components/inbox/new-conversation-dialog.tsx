@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,7 @@ export function NewConversationDialog({
   onSuccess,
   trigger,
 }: NewConversationDialogProps) {
+  const t = useTranslations("Inbox.newConversation");
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"existing" | "new">("existing");
   const [search, setSearch] = useState("");
@@ -90,7 +92,7 @@ export function NewConversationDialog({
     e.preventDefault();
     const trimmedMsg = message.trim();
     if (!trimmedMsg) {
-      toast.error("Digite uma mensagem inicial para iniciar a conversa.");
+      toast.error(t("errorEmptyMessage"));
       return;
     }
 
@@ -101,7 +103,7 @@ export function NewConversationDialog({
       if (mode === "new") {
         const cleanPhone = newPhone.trim();
         if (!cleanPhone) {
-          toast.error("O número de telefone é obrigatório.");
+          toast.error(t("errorPhoneRequired"));
           setSubmitting(false);
           return;
         }
@@ -117,7 +119,7 @@ export function NewConversationDialog({
 
         if (!createRes.ok) {
           const errData = await createRes.json().catch(() => ({}));
-          throw new Error(errData.error || "Falha ao criar contato.");
+          throw new Error(errData.error || t("errorCreateFailed"));
         }
 
         const contactData = await createRes.json();
@@ -125,7 +127,7 @@ export function NewConversationDialog({
       }
 
       if (!targetContactId) {
-        toast.error("Selecione ou crie um contato primeiro.");
+        toast.error(t("errorSelectContact"));
         setSubmitting(false);
         return;
       }
@@ -143,16 +145,16 @@ export function NewConversationDialog({
 
       const sendData = await sendRes.json();
       if (!sendRes.ok) {
-        throw new Error(sendData.error || "Falha ao enviar mensagem.");
+        throw new Error(sendData.error || t("errorSendFailed"));
       }
 
-      toast.success("Conversa iniciada com sucesso!");
+      toast.success(t("successCreated"));
       setOpen(false);
       if (sendData.conversation_id) {
         onSuccess(sendData.conversation_id);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Erro desconhecido";
+      const msg = err instanceof Error ? err.message : "Error";
       toast.error(msg);
     } finally {
       setSubmitting(false);
@@ -173,13 +175,13 @@ export function NewConversationDialog({
           }
         >
           <Plus className="h-3.5 w-3.5" />
-          <span>Nova Conversa</span>
+          <span>{t("trigger")}</span>
         </DialogTrigger>
       )}
       <DialogContent className="max-w-md border-border bg-card p-6 text-foreground sm:rounded-xl">
         <DialogHeader>
           <DialogTitle className="text-base font-semibold text-foreground">
-            Iniciar Nova Conversa
+            {t("title")}
           </DialogTitle>
         </DialogHeader>
 
@@ -194,7 +196,7 @@ export function NewConversationDialog({
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Contato Existente
+            {t("existingContact")}
           </button>
           <button
             type="button"
@@ -205,7 +207,7 @@ export function NewConversationDialog({
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Novo Número
+            {t("newNumber")}
           </button>
         </div>
 
@@ -213,14 +215,14 @@ export function NewConversationDialog({
           {mode === "existing" ? (
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">
-                Buscar contato
+                {t("searchContact")}
               </Label>
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Nome ou telefone..."
+                  placeholder={t("searchPlaceholder")}
                   className="h-9 border-border bg-muted pl-8 text-xs placeholder:text-muted-foreground"
                 />
               </div>
@@ -230,11 +232,11 @@ export function NewConversationDialog({
                 {loadingContacts ? (
                   <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
                     <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary" />
-                    Carregando contatos...
+                    {t("loadingContacts")}
                   </div>
                 ) : filteredContacts.length === 0 ? (
                   <div className="py-6 text-center text-xs text-muted-foreground">
-                    Nenhum contato encontrado.
+                    {t("noContacts")}
                   </div>
                 ) : (
                   filteredContacts.map((c) => {
@@ -255,7 +257,7 @@ export function NewConversationDialog({
                             <User className="h-3.5 w-3.5" />
                           </div>
                           <span className="truncate">
-                            {c.name || "Sem nome"}
+                            {c.name || t("unnamed")}
                           </span>
                         </div>
                         <span className="shrink-0 text-[11px] text-muted-foreground">
@@ -268,8 +270,9 @@ export function NewConversationDialog({
               </div>
               {selectedContact && (
                 <p className="text-[11px] text-primary">
-                  Contato selecionado:{" "}
-                  <strong>{selectedContact.name || selectedContact.phone}</strong>
+                  {t("selectedContact", {
+                    name: selectedContact.name || selectedContact.phone,
+                  })}
                 </p>
               )}
             </div>
@@ -277,19 +280,19 @@ export function NewConversationDialog({
             <div className="space-y-3">
               <div>
                 <Label htmlFor="new-name" className="text-xs text-muted-foreground">
-                  Nome (opcional)
+                  {t("nameLabel")}
                 </Label>
                 <Input
                   id="new-name"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Ex: Carlos Silva"
+                  placeholder={t("namePlaceholder")}
                   className="mt-1 h-9 border-border bg-muted text-xs"
                 />
               </div>
               <div>
                 <Label htmlFor="new-phone" className="text-xs text-muted-foreground">
-                  Número de WhatsApp (com DDI e DDD)
+                  {t("phoneLabel")}
                 </Label>
                 <div className="relative mt-1">
                   <Phone className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -297,7 +300,7 @@ export function NewConversationDialog({
                     id="new-phone"
                     value={newPhone}
                     onChange={(e) => setNewPhone(e.target.value)}
-                    placeholder="+55 11 99999-8888"
+                    placeholder={t("phonePlaceholder")}
                     className="h-9 border-border bg-muted pl-8 text-xs"
                     required
                   />
@@ -309,13 +312,13 @@ export function NewConversationDialog({
           {/* Initial Message */}
           <div className="space-y-1.5">
             <Label htmlFor="init-msg" className="text-xs text-muted-foreground">
-              Mensagem Inicial
+              {t("initialMessage")}
             </Label>
             <Textarea
               id="init-msg"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="Digite a mensagem para enviar..."
+              placeholder={t("messagePlaceholder")}
               className="min-h-20 border-border bg-muted text-xs"
               required
             />
@@ -329,7 +332,7 @@ export function NewConversationDialog({
               onClick={() => setOpen(false)}
               className="h-8 text-xs text-muted-foreground hover:text-foreground"
             >
-              Cancelar
+              {t("cancel")}
             </Button>
             <Button
               type="submit"
@@ -345,12 +348,12 @@ export function NewConversationDialog({
               {submitting ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  <span>Enviando...</span>
+                  <span>{t("sending")}</span>
                 </>
               ) : (
                 <>
                   <Send className="h-3.5 w-3.5" />
-                  <span>Iniciar Conversa</span>
+                  <span>{t("send")}</span>
                 </>
               )}
             </Button>

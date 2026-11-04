@@ -28,13 +28,6 @@ export const SUPPORTED_LOCALES: readonly LocaleOption[] = [
     flag: "🇪🇸",
     short: "ES",
   },
-  {
-    id: "ko",
-    name: "Korean",
-    nativeName: "한국어",
-    flag: "🇰🇷",
-    short: "KO",
-  },
 ] as const;
 
 export const DEFAULT_LOCALE = "pt-BR";
@@ -43,11 +36,13 @@ export const LOCALE_STORAGE_KEY = "wacrm_locale";
 
 /**
  * Set the user's active locale across cookie, localStorage and reload.
+ * Synchronizes with /api/locale to ensure Next.js App Router server components
+ * and Edge middleware receive the authoritative Set-Cookie response header.
  */
-export function setLocalePreference(localeId: string) {
+export async function setLocalePreference(localeId: string): Promise<void> {
   if (typeof window === "undefined") return;
 
-  // Set cookie with 1 year expiration
+  // 1. Client-side fallback cookie
   const maxAge = 60 * 60 * 24 * 365;
   document.cookie = `${LOCALE_COOKIE_KEY}=${encodeURIComponent(
     localeId
@@ -57,6 +52,17 @@ export function setLocalePreference(localeId: string) {
     localStorage.setItem(LOCALE_STORAGE_KEY, localeId);
   } catch {}
 
-  // Hard reload to re-run next-intl server components with the new locale
+  // 2. Authoritative server cookie via API route
+  try {
+    await fetch("/api/locale", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ locale: localeId }),
+    });
+  } catch {
+    // Proceed with reload even if fetch fails
+  }
+
+  // 3. Hard reload to render all Server and Client components with the new locale
   window.location.reload();
 }

@@ -222,8 +222,8 @@ export function ContactSidebar({ contact, className }: ContactSidebarProps) {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                title="Alterar foto do contato"
-                aria-label="Alterar foto do contato"
+                title={tSidebar("changePhoto")}
+                aria-label={tSidebar("changePhoto")}
                 className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-background border border-border text-muted-foreground shadow-sm hover:text-foreground hover:bg-muted transition-colors"
               >
                 <Camera className="h-3 w-3" />
@@ -246,7 +246,7 @@ export function ContactSidebar({ contact, className }: ContactSidebarProps) {
               ) : (
                 <RefreshCw className="h-3 w-3 text-primary" />
               )}
-              <span>{syncingAvatar ? "Sincronizando..." : "Sincronizar Foto WA"}</span>
+              <span>{syncingAvatar ? tSidebar("syncingPhoto") : tSidebar("syncWhatsappPhoto")}</span>
             </button>
           </div>
 
