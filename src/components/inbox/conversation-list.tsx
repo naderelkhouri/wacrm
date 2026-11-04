@@ -461,6 +461,7 @@ function ConversationItem({
   const contact = conversation.contact;
   const displayName = contact?.name || contact?.phone || t("unknown");
   const initials = displayName.charAt(0).toUpperCase();
+  const [imgError, setImgError] = useState(false);
 
   const handleClick = useCallback(() => {
     onSelect(conversation);
@@ -482,12 +483,13 @@ function ConversationItem({
       )}
     >
       {/* Avatar */}
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
-        {contact?.avatar_url ? (
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground overflow-hidden">
+        {contact?.avatar_url && !imgError ? (
           /* eslint-disable-next-line @next/next/no-img-element -- Dynamic external avatars from Meta/Supabase */
           <img
             src={contact.avatar_url}
             alt={displayName}
+            onError={() => setImgError(true)}
             className="h-10 w-10 rounded-full object-cover"
           />
         ) : (

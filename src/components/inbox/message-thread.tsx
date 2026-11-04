@@ -227,6 +227,10 @@ export function MessageThread({
     }, 700);
   }, [isRefreshing, onRefresh]);
   const [replyTo, setReplyTo] = useState<ReplyDraft | null>(null);
+  const [avatarError, setAvatarError] = useState(false);
+  useEffect(() => {
+    setAvatarError(false);
+  }, [contact?.id, contact?.avatar_url]);
 
   // Profiles are bounded by RLS to rows the current user is allowed to
   // see — today that's just the current user, but the dropdown keeps the
@@ -932,8 +936,18 @@ export function MessageThread({
             aria-label="Ver detalhes e notas do contato"
             className="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg p-1 transition-colors hover:bg-muted/50 sm:gap-3 lg:cursor-default lg:hover:bg-transparent"
           >
-            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
-              {displayName.charAt(0).toUpperCase()}
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground overflow-hidden">
+              {contact.avatar_url && !avatarError ? (
+                /* eslint-disable-next-line @next/next/no-img-element -- Dynamic external avatar from WhatsApp */
+                <img
+                  src={contact.avatar_url}
+                  alt={displayName}
+                  onError={() => setAvatarError(true)}
+                  className="h-9 w-9 rounded-full object-cover"
+                />
+              ) : (
+                displayName.charAt(0).toUpperCase()
+              )}
             </div>
             <div className="min-w-0">
               <h2 className="flex items-center gap-1.5 truncate text-sm font-semibold text-foreground">

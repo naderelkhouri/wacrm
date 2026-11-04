@@ -800,6 +800,7 @@ export interface NormalizedWebhookEntry {
       contacts?: Array<{
         profile: { name: string };
         wa_id: string;
+        avatar_url?: string;
       }>;
       messages?: Array<{
         id: string;
@@ -991,6 +992,82 @@ export function parseUazapiWebhookToMetaEntries(
   }
 
   // ----------------------------------------------------------
+  // 1.5 Contact & Chat Updates (contacts / chats)
+  // ----------------------------------------------------------
+  if (
+    eventType === 'contacts' ||
+    eventType === 'chats' ||
+    eventType === 'contacts.upsert' ||
+    eventType === 'contacts.update' ||
+    eventType === 'contact_update'
+  ) {
+    const contactOrChat =
+      (payload.data && typeof payload.data === 'object'
+        ? (payload.data as Record<string, unknown>)
+        : null) ||
+      (payload.chat && typeof payload.chat === 'object'
+        ? (payload.chat as Record<string, unknown>)
+        : null) ||
+      payload;
+
+    const rawJid = String(
+      contactOrChat.id ||
+        contactOrChat.jid ||
+        contactOrChat.phone ||
+        contactOrChat.wa_chatid ||
+        ''
+    );
+    const phone = rawJid
+      .replace(/@s\.whatsapp\.net$/i, '')
+      .replace(/:\d+$/, '')
+      .replace(/\D/g, '');
+
+    if (phone) {
+      const name = String(
+        contactOrChat.name ||
+          contactOrChat.wa_name ||
+          contactOrChat.pushName ||
+          contactOrChat.contactName ||
+          phone
+      ).trim();
+
+      const rawPic =
+        (typeof contactOrChat.profilePicUrl === 'string' && contactOrChat.profilePicUrl) ||
+        (typeof contactOrChat.image === 'string' && contactOrChat.image) ||
+        (typeof contactOrChat.profile_picture === 'string' && contactOrChat.profile_picture) ||
+        '';
+
+      const avatar = /^https?:\/\//i.test(rawPic.trim()) ? rawPic.trim() : undefined;
+
+      return [
+        {
+          id: phoneNumberId,
+          changes: [
+            {
+              field: 'messages',
+              value: {
+                messaging_product: 'whatsapp',
+                metadata: {
+                  display_phone_number: phoneNumberId,
+                  phone_number_id: phoneNumberId,
+                },
+                contacts: [
+                  {
+                    profile: { name },
+                    wa_id: phone,
+                    ...(avatar ? { avatar_url: avatar } : {}),
+                  },
+                ],
+                messages: [],
+              },
+            },
+          ],
+        },
+      ];
+    }
+  }
+
+  // ----------------------------------------------------------
   // 2. Inbound Messages (Uazapi v2 `message` or v1 `data`)
   // ----------------------------------------------------------
   const msgObj =
@@ -1057,6 +1134,36 @@ export function parseUazapiWebhookToMetaEntries(
       chatObj.name ||
       senderPhone
   ).trim();
+
+  // Extract avatar / profile picture URL if included in payload
+  const senderObj =
+    payload.sender && typeof payload.sender === 'object'
+      ? (payload.sender as Record<string, unknown>)
+      : {};
+
+  const dataObj =
+    payload.data && typeof payload.data === 'object'
+      ? (payload.data as Record<string, unknown>)
+      : {};
+
+  const rawAvatarCandidate =
+    (typeof chatObj.profilePicUrl === 'string' && chatObj.profilePicUrl) ||
+    (typeof chatObj.image === 'string' && chatObj.image) ||
+    (typeof chatObj.profile_picture === 'string' && chatObj.profile_picture) ||
+    (typeof msgObj.profilePicUrl === 'string' && msgObj.profilePicUrl) ||
+    (typeof msgObj.senderProfilePicUrl === 'string' && msgObj.senderProfilePicUrl) ||
+    (typeof msgObj.profile_picture === 'string' && msgObj.profile_picture) ||
+    (typeof msgObj.avatarUrl === 'string' && msgObj.avatarUrl) ||
+    (typeof senderObj.profilePicUrl === 'string' && senderObj.profilePicUrl) ||
+    (typeof senderObj.image === 'string' && senderObj.image) ||
+    (typeof dataObj.profilePicUrl === 'string' && dataObj.profilePicUrl) ||
+    (typeof dataObj.image === 'string' && dataObj.image) ||
+    (typeof payload.profilePicUrl === 'string' && payload.profilePicUrl) ||
+    '';
+
+  const avatarUrl = /^https?:\/\//i.test(rawAvatarCandidate.trim())
+    ? rawAvatarCandidate.trim()
+    : undefined;
 
   const messageId = String(
     msgObj.messageid ||
@@ -1213,6 +1320,7 @@ export function parseUazapiWebhookToMetaEntries(
               {
                 profile: { name: contactName },
                 wa_id: senderPhone,
+                ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
               },
             ],
             messages: [normalizedMessage],
@@ -1221,4 +1329,107 @@ export function parseUazapiWebhookToMetaEntries(
       ],
     },
   ];
+}
+
+/**
+ * Recursively inspects a data structure to find a profile picture / avatar URL.
+ */
+export function extractAvatarUrlFromData(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null;
+
+  const obj = data as Record<string, unknown>;
+
+  const keys = [
+    'profilePicUrl',
+    'profile_picture',
+    'profilePictureUrl',
+    'image',
+    'avatarUrl',
+    'picture',
+    'photo',
+    'url',
+  ];
+
+  for (const k of keys) {
+    if (typeof obj[k] === 'string' && /^https?:\/\//i.test((obj[k] as string).trim())) {
+      return (obj[k] as string).trim();
+    }
+  }
+
+  // Nested property checks
+  const subKeys = ['chat', 'contact', 'data', 'response', 'result', 'instance', 'user'];
+  for (const sub of subKeys) {
+    if (obj[sub] && typeof obj[sub] === 'object') {
+      const found = extractAvatarUrlFromData(obj[sub]);
+      if (found) return found;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Attempts to retrieve a contact's WhatsApp profile picture URL via Uazapi.
+ * Tries multiple endpoint patterns supported across Uazapi v2 and v1 instances.
+ */
+export async function fetchUazapiProfilePictureUrl(params: {
+  apiUrl: string;
+  instanceToken: string;
+  instanceName?: string | null;
+  phone: string;
+}): Promise<string | null> {
+  const baseUrl = normalizeUazapiBaseUrl(params.apiUrl);
+  const headers = buildUazapiHeaders(params.instanceToken);
+  const number = formatPhoneForUazapi(params.phone);
+
+  const candidateEndpoints: Array<{
+    url: string;
+    method: 'GET' | 'POST';
+    body?: Record<string, unknown>;
+  }> = [
+    { url: `${baseUrl}/chat/details`, method: 'POST', body: { number } },
+    { url: `${baseUrl}/chat/find`, method: 'POST', body: { number } },
+    { url: `${baseUrl}/chat/fetchProfilePictureUrl`, method: 'POST', body: { number } },
+    { url: `${baseUrl}/chat/check`, method: 'POST', body: { number } },
+    { url: `${baseUrl}/contact/find`, method: 'POST', body: { number } },
+    { url: `${baseUrl}/chat/profilePictureUrl?number=${encodeURIComponent(number)}`, method: 'GET' },
+  ];
+
+  if (params.instanceName) {
+    candidateEndpoints.push(
+      {
+        url: `${baseUrl}/chat/fetchProfilePictureUrl/${encodeURIComponent(params.instanceName)}?number=${encodeURIComponent(number)}`,
+        method: 'GET',
+      },
+      {
+        url: `${baseUrl}/chat/find/${encodeURIComponent(params.instanceName)}?number=${encodeURIComponent(number)}`,
+        method: 'GET',
+      }
+    );
+  }
+
+  for (const ep of candidateEndpoints) {
+    try {
+      const res = await fetch(ep.url, {
+        method: ep.method,
+        headers,
+        body: ep.body ? JSON.stringify(ep.body) : undefined,
+        signal: AbortSignal.timeout(UAZAPI_TIMEOUT_MS),
+      });
+
+      if (!res.ok) continue;
+
+      const data = await res.json().catch(() => null);
+      if (!data) continue;
+
+      const url = extractAvatarUrlFromData(data);
+      if (url) {
+        return url;
+      }
+    } catch {
+      // Continue trying next candidate
+    }
+  }
+
+  return null;
 }

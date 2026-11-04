@@ -54,6 +54,7 @@ export function ContactForm({
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [company, setCompany] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
   const [saving, setSaving] = useState(false);
 
   // Duplicate-phone detection for NEW contacts. `exact` (same digits)
@@ -85,6 +86,7 @@ export function ContactForm({
       setPhone(contact?.phone ?? '');
       setEmail(contact?.email ?? '');
       setCompany(contact?.company ?? '');
+      setAvatarUrl(contact?.avatar_url ?? '');
       setSelectedTagIds(contactTags.map((ct) => ct.tag_id));
       setDupMatch(null);
       void fetchTags();
@@ -183,6 +185,7 @@ export function ContactForm({
             phone: phone.trim(),
             email: email.trim() || null,
             company: company.trim() || null,
+            avatar_url: avatarUrl.trim() || null,
             updated_at: new Date().toISOString(),
           })
           .eq('id', contactId);
@@ -197,6 +200,7 @@ export function ContactForm({
             phone: phone.trim(),
             email: email.trim() || null,
             company: company.trim() || null,
+            avatar_url: avatarUrl.trim() || null,
           })
           .select('id')
           .single();
@@ -345,6 +349,19 @@ export function ContactForm({
               value={company}
               onChange={(e) => setCompany(e.target.value)}
               placeholder={t('companyPlaceholder')}
+              className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cf-avatar" className="text-muted-foreground">
+              URL da Foto / Avatar (Opcional)
+            </Label>
+            <Input
+              id="cf-avatar"
+              value={avatarUrl}
+              onChange={(e) => setAvatarUrl(e.target.value)}
+              placeholder="https://..."
               className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
             />
           </div>

@@ -446,6 +446,27 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
           decryptedAccessToken
         )
       }
+
+      // If this was a contact-sync event with no messages attached,
+      // update or create the contact records with their name & avatar.
+      if (!value.messages || value.messages.length === 0) {
+        if (value.contacts && value.contacts.length > 0) {
+          for (const c of value.contacts) {
+            if (c.wa_id) {
+              const phone = normalizePhone(c.wa_id)
+              const name = c.profile?.name || phone
+              const avatar = (c as { avatar_url?: string }).avatar_url || null
+              await findOrCreateContact(
+                config.account_id,
+                config.user_id,
+                phone,
+                name,
+                avatar
+              )
+            }
+          }
+        }
+      }
     }
   }
 }
@@ -702,7 +723,7 @@ async function handleReaction(
 
 async function processMessage(
   message: WhatsAppMessage,
-  contact: { profile: { name: string }; wa_id: string },
+  contact: { profile: { name: string }; wa_id: string; avatar_url?: string },
   // Tenancy. Resolved from the matched whatsapp_config row; every
   // contact / conversation / message row created downstream is
   // stamped with this so any member of the account can see it.
@@ -715,13 +736,15 @@ async function processMessage(
 ) {
   const senderPhone = normalizePhone(message.from)
   const contactName = contact.profile.name
+  const avatarUrl = (contact as { avatar_url?: string }).avatar_url || null
 
   // Find or create contact
   const contactOutcome = await findOrCreateContact(
     accountId,
     configOwnerUserId,
     senderPhone,
-    contactName
+    contactName,
+    avatarUrl
   )
   if (!contactOutcome) return
   const contactRecord = contactOutcome.contact
@@ -1145,7 +1168,8 @@ async function findOrCreateContact(
   accountId: string,
   configOwnerUserId: string,
   phone: string,
-  name: string
+  name: string,
+  avatarUrl?: string | null
 ): Promise<ContactOutcome | null> {
   // Find an existing contact for this account by phone. The shared
   // helper pre-filters in SQL by the last-8-digit suffix (so we don't
@@ -1160,14 +1184,21 @@ async function findOrCreateContact(
   )
 
   if (existingContact) {
-    // Update name if it changed
+    const updates: Record<string, unknown> = {}
     if (name && name !== existingContact.name) {
+      updates.name = name
+    }
+    if (avatarUrl && avatarUrl !== existingContact.avatar_url) {
+      updates.avatar_url = avatarUrl
+    }
+    if (Object.keys(updates).length > 0) {
+      updates.updated_at = new Date().toISOString()
       await supabaseAdmin()
         .from('contacts')
-        .update({ name, updated_at: new Date().toISOString() })
+        .update(updates)
         .eq('id', existingContact.id)
     }
-    return { contact: existingContact, wasCreated: false }
+    return { contact: { ...existingContact, ...updates }, wasCreated: false }
   }
 
   // Create new contact. account_id is the tenancy column;
@@ -1181,6 +1212,7 @@ async function findOrCreateContact(
       user_id: configOwnerUserId,
       phone,
       name: name || phone,
+      ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
     })
     .select()
     .single()
@@ -1192,7 +1224,15 @@ async function findOrCreateContact(
     // the existing row instead of dropping the message.
     if (isUniqueViolation(createError)) {
       const raced = await findExistingContact(supabaseAdmin(), accountId, phone)
-      if (raced) return { contact: raced, wasCreated: false }
+      if (raced) {
+        if (avatarUrl && !raced.avatar_url) {
+          await supabaseAdmin()
+            .from('contacts')
+            .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
+            .eq('id', raced.id)
+        }
+        return { contact: raced, wasCreated: false }
+      }
     }
     console.error('Error creating contact:', createError)
     return null

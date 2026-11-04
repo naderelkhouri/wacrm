@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Phone,
   Mail,
@@ -36,6 +36,8 @@ import {
   Save,
   DollarSign,
   LayoutTemplate,
+  RefreshCw,
+  Camera,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
@@ -59,6 +61,29 @@ export function ContactDetailView({
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(false);
   const [copiedPhone, setCopiedPhone] = useState(false);
+  const [syncingAvatar, setSyncingAvatar] = useState(false);
+
+  const handleSyncWhatsAppAvatar = async () => {
+    if (!contact || syncingAvatar) return;
+    setSyncingAvatar(true);
+    try {
+      const res = await fetch(`/api/contacts/${contact.id}/sync-whatsapp-avatar`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (data.success && data.avatar_url) {
+        setContact({ ...contact, avatar_url: data.avatar_url });
+        onUpdated();
+        toast.success(data.message || 'Foto do WhatsApp sincronizada com sucesso!');
+      } else {
+        toast.info(data.message || 'Foto não encontrada no WhatsApp.');
+      }
+    } catch {
+      toast.error('Erro ao sincronizar foto.');
+    } finally {
+      setSyncingAvatar(false);
+    }
+  };
 
   // Send template — lets the business initiate (or re-open) a conversation
   // with this contact by sending an approved template. The send route
@@ -389,15 +414,38 @@ export function ContactDetailView({
             {/* Header */}
             <SheetHeader className="p-4 border-b border-border/50">
               <div className="flex items-center gap-3">
-                <Avatar className="size-12 bg-muted border border-border">
+                <Avatar className="size-12 bg-muted border border-border shrink-0">
+                  {contact.avatar_url && (
+                    <AvatarImage
+                      src={contact.avatar_url}
+                      alt={contact.name || contact.phone}
+                      className="object-cover"
+                    />
+                  )}
                   <AvatarFallback className="bg-primary/10 text-primary text-sm font-medium">
-                    {getInitials(contact.name)}
+                    {getInitials(contact.name || contact.phone)}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <SheetTitle className="text-popover-foreground truncate">
-                    {contact.name || t('unnamed')}
-                  </SheetTitle>
+                  <div className="flex items-center justify-between gap-2">
+                    <SheetTitle className="text-popover-foreground truncate">
+                      {contact.name || t('unnamed')}
+                    </SheetTitle>
+                    <button
+                      type="button"
+                      onClick={handleSyncWhatsAppAvatar}
+                      disabled={syncingAvatar}
+                      title="Sincronizar foto do WhatsApp via Uazapi"
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors border border-border/70 rounded px-2 py-0.5"
+                    >
+                      {syncingAvatar ? (
+                        <Loader2 className="size-3 animate-spin text-primary" />
+                      ) : (
+                        <RefreshCw className="size-3 text-primary" />
+                      )}
+                      <span>{syncingAvatar ? 'Sincronizando...' : 'Sincronizar Foto WA'}</span>
+                    </button>
+                  </div>
                   <SheetDescription className="text-muted-foreground text-xs mt-0.5">
                     {t('contactDetailsDesc')}
                   </SheetDescription>

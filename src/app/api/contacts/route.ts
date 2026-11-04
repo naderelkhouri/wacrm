@@ -128,7 +128,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { name, phone, email, tags, company } = body;
+    const { name, phone, email, tags, company, avatar_url } = body;
 
     if (!phone) {
       return NextResponse.json({ error: 'Telefone é obrigatório.' }, { status: 400 });
@@ -191,6 +191,7 @@ export async function POST(request: Request) {
         phone,
         email,
         company,
+        avatar_url: avatar_url || null,
       })
       .select()
       .single();

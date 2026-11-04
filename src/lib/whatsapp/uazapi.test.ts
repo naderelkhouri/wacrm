@@ -11,6 +11,8 @@ import {
   isUazapiWebhookPayload,
   extractUazapiWebhookToken,
   parseUazapiWebhookToMetaEntries,
+  extractAvatarUrlFromData,
+  fetchUazapiProfilePictureUrl,
 } from './uazapi';
 
 describe('Uazapi WhatsApp Provider Client', () => {
@@ -301,6 +303,109 @@ describe('Uazapi WhatsApp Provider Client', () => {
         timestamp: '1730000100',
         recipient_id: '5511977776666',
       });
+    });
+
+    it('extracts avatar_url from inbound message payload (chat.profilePicUrl)', () => {
+      const avatarPic = 'https://pps.whatsapp.net/v/t61.24694-24/test.jpg';
+      const entries = parseUazapiWebhookToMetaEntries(
+        {
+          EventType: 'messages',
+          message: {
+            messageid: 'MSG_AVATAR_1',
+            chatid: '5511988889999@s.whatsapp.net',
+            senderName: 'Juliana',
+            fromMe: false,
+            text: 'Olá!',
+          },
+          chat: {
+            profilePicUrl: avatarPic,
+          },
+        },
+        '5511999998888'
+      );
+
+      expect(entries).toHaveLength(1);
+      const contact = entries[0].changes[0].value.contacts?.[0];
+      expect(contact?.profile.name).toBe('Juliana');
+      expect(contact?.wa_id).toBe('5511988889999');
+      expect(contact?.avatar_url).toBe(avatarPic);
+    });
+
+    it('normalizes EventType: contacts into a contact entry with avatar_url', () => {
+      const avatarPic = 'https://pps.whatsapp.net/v/t61.24694-24/contact.jpg';
+      const entries = parseUazapiWebhookToMetaEntries(
+        {
+          EventType: 'contacts',
+          data: {
+            id: '5511977778888@s.whatsapp.net',
+            name: 'Marcos Roberto',
+            profilePicUrl: avatarPic,
+          },
+        },
+        '5511999998888'
+      );
+
+      expect(entries).toHaveLength(1);
+      const contact = entries[0].changes[0].value.contacts?.[0];
+      expect(contact?.profile.name).toBe('Marcos Roberto');
+      expect(contact?.wa_id).toBe('5511977778888');
+      expect(contact?.avatar_url).toBe(avatarPic);
+      expect(entries[0].changes[0].value.messages).toEqual([]);
+    });
+  });
+
+  describe('extractAvatarUrlFromData', () => {
+    it('finds avatar URLs across various payload nesting structures', () => {
+      const direct = { profilePicUrl: 'https://pps.whatsapp.net/direct.jpg' };
+      expect(extractAvatarUrlFromData(direct)).toBe('https://pps.whatsapp.net/direct.jpg');
+
+      const nestedChat = {
+        chat: {
+          image: 'https://pps.whatsapp.net/nested.jpg',
+        },
+      };
+      expect(extractAvatarUrlFromData(nestedChat)).toBe('https://pps.whatsapp.net/nested.jpg');
+
+      const responseWrapper = {
+        response: {
+          profile_picture: 'https://pps.whatsapp.net/resp.jpg',
+        },
+      };
+      expect(extractAvatarUrlFromData(responseWrapper)).toBe('https://pps.whatsapp.net/resp.jpg');
+
+      expect(extractAvatarUrlFromData({ notAnAvatar: 'some string' })).toBeNull();
+      expect(extractAvatarUrlFromData(null)).toBeNull();
+    });
+  });
+
+  describe('fetchUazapiProfilePictureUrl', () => {
+    it('queries candidate endpoints and returns the first valid avatar URL', async () => {
+      const avatarUrl = 'https://pps.whatsapp.net/v/found.jpg';
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(JSON.stringify({ profilePicUrl: avatarUrl }), { status: 200 })
+      );
+
+      const result = await fetchUazapiProfilePictureUrl({
+        apiUrl: 'https://free.uazapi.com',
+        instanceToken: 'tok_123',
+        phone: '5511999998888',
+      });
+
+      expect(result).toBe(avatarUrl);
+    });
+
+    it('returns null if all endpoints return 404 or empty response', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(JSON.stringify({ code: 404, message: 'Not found' }), { status: 404 })
+      );
+
+      const result = await fetchUazapiProfilePictureUrl({
+        apiUrl: 'https://free.uazapi.com',
+        instanceToken: 'tok_123',
+        phone: '5511999998888',
+      });
+
+      expect(result).toBeNull();
     });
   });
 });

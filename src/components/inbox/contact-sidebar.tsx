@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import type { Contact, Deal, ContactNote, Tag } from "@/types";
@@ -13,7 +13,11 @@ import {
   DollarSign,
   StickyNote,
   Plus,
+  Camera,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
@@ -36,6 +40,64 @@ export function ContactSidebar({ contact, className }: ContactSidebarProps) {
   const [tags, setTags] = useState<(Tag & { contact_tag_id: string })[]>([]);
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
+  const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string | null>(contact?.avatar_url ?? null);
+  const [avatarError, setAvatarError] = useState(false);
+  const [syncingAvatar, setSyncingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setCurrentAvatarUrl(contact?.avatar_url ?? null);
+    setAvatarError(false);
+  }, [contact?.id, contact?.avatar_url]);
+
+  const handleSyncAvatar = async () => {
+    if (!contact || syncingAvatar) return;
+    setSyncingAvatar(true);
+    try {
+      const res = await fetch(`/api/contacts/${contact.id}/sync-whatsapp-avatar`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (data.success && data.avatar_url) {
+        setCurrentAvatarUrl(data.avatar_url);
+        setAvatarError(false);
+        toast.success(data.message || "Foto do WhatsApp sincronizada com sucesso!");
+      } else {
+        toast.info(data.message || "Foto não encontrada no WhatsApp.");
+      }
+    } catch {
+      toast.error("Erro ao sincronizar foto do WhatsApp.");
+    } finally {
+      setSyncingAvatar(false);
+    }
+  };
+
+  const handleUploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !contact) return;
+    const formData = new FormData();
+    formData.append("file", file);
+    setSyncingAvatar(true);
+    try {
+      const res = await fetch(`/api/contacts/${contact.id}/avatar`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success && data.avatar_url) {
+        setCurrentAvatarUrl(data.avatar_url);
+        setAvatarError(false);
+        toast.success("Foto atualizada com sucesso!");
+      } else {
+        toast.error(data.error || "Erro ao atualizar foto.");
+      }
+    } catch {
+      toast.error("Erro ao enviar imagem.");
+    } finally {
+      setSyncingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const fetchContactData = useCallback(async () => {
     if (!contact) return;
@@ -136,17 +198,36 @@ export function ContactSidebar({ contact, className }: ContactSidebarProps) {
         <div className="p-4">
           {/* Contact Info */}
           <div className="flex flex-col items-center text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted text-lg font-semibold text-foreground">
-              {contact.avatar_url ? (
-                /* eslint-disable-next-line @next/next/no-img-element -- Dynamic external avatars from Meta/Supabase */
-                <img
-                  src={contact.avatar_url}
-                  alt={displayName}
-                  className="h-16 w-16 rounded-full object-cover"
-                />
-              ) : (
-                initials
-              )}
+            <div className="relative group">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted text-lg font-semibold text-foreground overflow-hidden border border-border shadow-sm">
+                {currentAvatarUrl && !avatarError ? (
+                  /* eslint-disable-next-line @next/next/no-img-element -- Dynamic external avatars from WhatsApp */
+                  <img
+                    src={currentAvatarUrl}
+                    alt={displayName}
+                    onError={() => setAvatarError(true)}
+                    className="h-16 w-16 rounded-full object-cover"
+                  />
+                ) : (
+                  initials
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="hidden"
+                onChange={handleUploadAvatar}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                title="Alterar foto do contato"
+                aria-label="Alterar foto do contato"
+                className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-background border border-border text-muted-foreground shadow-sm hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <Camera className="h-3 w-3" />
+              </button>
             </div>
             <h3 className="mt-3 text-sm font-semibold text-foreground">
               {displayName}
@@ -154,6 +235,19 @@ export function ContactSidebar({ contact, className }: ContactSidebarProps) {
             {contact.company && (
               <p className="text-xs text-muted-foreground">{contact.company}</p>
             )}
+            <button
+              type="button"
+              onClick={handleSyncAvatar}
+              disabled={syncingAvatar}
+              className="mt-2.5 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors border border-border/70"
+            >
+              {syncingAvatar ? (
+                <Loader2 className="h-3 w-3 animate-spin text-primary" />
+              ) : (
+                <RefreshCw className="h-3 w-3 text-primary" />
+              )}
+              <span>{syncingAvatar ? "Sincronizando..." : "Sincronizar Foto WA"}</span>
+            </button>
           </div>
 
           {/* Phone */}

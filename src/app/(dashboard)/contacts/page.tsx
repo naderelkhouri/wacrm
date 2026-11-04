@@ -628,7 +628,26 @@ export default function ContactsPage() {
                     />
                   </TableCell>
                   <TableCell className="text-foreground font-medium">
-                    {contact.name || <span className="text-muted-foreground italic">{t('unnamed')}</span>}
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-foreground overflow-hidden border border-border/60">
+                        {contact.avatar_url ? (
+                          /* eslint-disable-next-line @next/next/no-img-element -- Dynamic external avatars from WhatsApp */
+                          <img
+                            src={contact.avatar_url}
+                            alt={contact.name || contact.phone}
+                            className="h-8 w-8 rounded-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          (contact.name || contact.phone).charAt(0).toUpperCase()
+                        )}
+                      </div>
+                      <span className="truncate">
+                        {contact.name || <span className="text-muted-foreground italic">{t('unnamed')}</span>}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground font-mono text-xs">
                     {contact.phone}
