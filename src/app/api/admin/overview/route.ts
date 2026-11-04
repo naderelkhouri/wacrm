@@ -73,17 +73,45 @@ export async function GET() {
     const signupMode = (signupSetting?.value as { mode?: string })?.mode || 'open';
 
     // 8. Recent 5 Tenants
-    const { data: recentAccounts } = await supabaseAdmin
+    const { data: rawRecentAccounts } = await supabaseAdmin
       .from('accounts')
       .select(`
         id,
         name,
+        owner_user_id,
         created_at,
-        owner:profiles!accounts_owner_user_id_fkey(full_name, email),
         subscription:account_subscriptions(status, plan_id)
       `)
       .order('created_at', { ascending: false })
       .limit(5);
+
+    const recentOwnerIds = Array.from(
+      new Set((rawRecentAccounts || []).map((a) => a.owner_user_id).filter(Boolean))
+    );
+
+    const recentProfileMap = new Map<string, { full_name: string | null; email: string | null }>();
+    if (recentOwnerIds.length > 0) {
+      const { data: profiles } = await supabaseAdmin
+        .from('profiles')
+        .select('user_id, full_name, email')
+        .in('user_id', recentOwnerIds);
+      if (profiles) {
+        for (const p of profiles) {
+          recentProfileMap.set(p.user_id, { full_name: p.full_name, email: p.email });
+        }
+      }
+    }
+
+    const recentAccounts = (rawRecentAccounts || []).map((acc) => {
+      const sub = Array.isArray(acc.subscription) ? acc.subscription[0] : acc.subscription;
+      return {
+        id: acc.id,
+        name: acc.name,
+        created_at: acc.created_at,
+        owner: acc.owner_user_id ? recentProfileMap.get(acc.owner_user_id) || null : null,
+        subscription: sub || null,
+      };
+    });
 
     // 9. Recent 5 Transactions
     const { data: recentTransactions } = await supabaseAdmin
