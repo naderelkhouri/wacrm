@@ -79,6 +79,8 @@ export function ConversationList({
   const [tags, setTags] = useState<Tag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+  const [configs, setConfigs] = useState<{ id: string; name: string; color: string }[]>([]);
 
   // Keep the latest callback in a ref so the fetch effect below can
   // have a stable, empty-dep identity. Previously the fetch useCallback
@@ -147,6 +149,33 @@ export function ConversationList({
     };
   }, []);
 
+  // Fetch available WhatsApp instances/channels to enable multi-instance filtering
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/whatsapp/config");
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled && Array.isArray(data.configs)) {
+            setConfigs(
+              data.configs.map((c: { id: string; name?: string; color?: string }) => ({
+                id: c.id,
+                name: c.name || "WhatsApp",
+                color: c.color || "#25D366",
+              }))
+            );
+          }
+        }
+      } catch {
+        // Non-critical fallback
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [resyncToken]);
+
   // Company options are derived from the loaded conversations — there's no
   // separate companies table, and only companies with a live conversation
   // are worth offering as an inbox filter.
@@ -158,6 +187,24 @@ export function ConversationList({
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [conversations]);
+
+  // WhatsApp channels/instances derived from configs and loaded conversations
+  const instances = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; color: string }>();
+    for (const cfg of configs) {
+      map.set(cfg.id, cfg);
+    }
+    for (const c of conversations) {
+      if (c.whatsapp_instance?.id && !map.has(c.whatsapp_instance.id)) {
+        map.set(c.whatsapp_instance.id, {
+          id: c.whatsapp_instance.id,
+          name: c.whatsapp_instance.name || "WhatsApp",
+          color: c.whatsapp_instance.color || "#25D366",
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [configs, conversations]);
 
   const tagsById = useMemo(() => {
     const m = new Map<string, Tag>();
@@ -184,6 +231,15 @@ export function ConversationList({
       );
     }
 
+    // Channel/Instance filter
+    if (selectedInstanceId) {
+      result = result.filter(
+        (c) =>
+          c.whatsapp_config_id === selectedInstanceId ||
+          c.whatsapp_instance?.id === selectedInstanceId
+      );
+    }
+
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter((c) => {
@@ -195,7 +251,7 @@ export function ConversationList({
     }
 
     return result;
-  }, [conversations, filter, search, selectedTagIds, selectedCompany]);
+  }, [conversations, filter, search, selectedTagIds, selectedCompany, selectedInstanceId]);
 
   const toggleTag = useCallback((id: string) => {
     setSelectedTagIds((prev) =>
@@ -206,9 +262,13 @@ export function ConversationList({
   const clearContactFilters = useCallback(() => {
     setSelectedTagIds([]);
     setSelectedCompany(null);
+    setSelectedInstanceId(null);
   }, []);
 
-  const hasContactFilters = selectedTagIds.length > 0 || selectedCompany !== null;
+  const hasContactFilters =
+    selectedTagIds.length > 0 ||
+    selectedCompany !== null ||
+    selectedInstanceId !== null;
 
   const handleSearchChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -364,6 +424,62 @@ export function ConversationList({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
+
+          {instances.length > 1 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className={cn(
+                  "inline-flex max-w-40 items-center justify-center h-7 gap-1 px-2 text-xs rounded-md hover:bg-muted",
+                  selectedInstanceId
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <span className="truncate">
+                  {selectedInstanceId
+                    ? instances.find((i) => i.id === selectedInstanceId)?.name ?? "Canal"
+                    : "Canais"}
+                </span>
+                <ChevronDown className="h-3 w-3 shrink-0" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                className="max-h-64 w-56 border-border bg-popover"
+              >
+                <DropdownMenuItem
+                  onClick={() => setSelectedInstanceId(null)}
+                  className={cn(
+                    "text-sm",
+                    selectedInstanceId === null
+                      ? "text-primary"
+                      : "text-popover-foreground"
+                  )}
+                >
+                  Todos os canais
+                </DropdownMenuItem>
+                {instances.map((inst) => (
+                  <DropdownMenuItem
+                    key={inst.id}
+                    onClick={() => setSelectedInstanceId(inst.id)}
+                    className={cn(
+                      "text-sm",
+                      selectedInstanceId === inst.id
+                        ? "text-primary"
+                        : "text-popover-foreground"
+                    )}
+                  >
+                    <span className="flex items-center gap-2 truncate">
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: inst.color }}
+                      />
+                      <span className="truncate">{inst.name}</span>
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         {hasContactFilters && (
@@ -391,6 +507,25 @@ export function ConversationList({
                 className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-foreground hover:bg-muted/70"
               >
                 <span className="max-w-24 truncate">{selectedCompany}</span>
+                <X className="h-3 w-3" />
+              </button>
+            )}
+            {selectedInstanceId && (
+              <button
+                onClick={() => setSelectedInstanceId(null)}
+                className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-foreground hover:bg-muted/70"
+              >
+                <span
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{
+                    backgroundColor:
+                      instances.find((i) => i.id === selectedInstanceId)?.color ??
+                      "#25D366",
+                  }}
+                />
+                <span className="max-w-24 truncate">
+                  {instances.find((i) => i.id === selectedInstanceId)?.name ?? "Canal"}
+                </span>
                 <X className="h-3 w-3" />
               </button>
             )}
@@ -524,6 +659,22 @@ function ConversationItem({
             />
           </div>
         </div>
+        {conversation.whatsapp_instance?.name && (
+          <div className="mt-1 flex items-center">
+            <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border border-border bg-muted/60 text-muted-foreground">
+              <span
+                className="h-1.5 w-1.5 rounded-full shrink-0"
+                style={{
+                  backgroundColor:
+                    conversation.whatsapp_instance.color || "#25D366",
+                }}
+              />
+              <span className="truncate max-w-[120px]">
+                {conversation.whatsapp_instance.name}
+              </span>
+            </span>
+          </div>
+        )}
       </div>
     </button>
   );

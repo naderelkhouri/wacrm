@@ -181,6 +181,15 @@ export interface Conversation {
   ai_autoreply_disabled?: boolean;
   ai_reply_count?: number;
   ai_handoff_summary?: string | null;
+  whatsapp_config_id?: string | null;
+  whatsapp_instance?: {
+    id: string;
+    name: string;
+    color?: string | null;
+    phone_number_id?: string | null;
+    provider?: string | null;
+    instance_name?: string | null;
+  } | null;
 }
 
 // ============================================================
@@ -271,6 +280,10 @@ export type WhatsAppProvider = 'meta' | 'uazapi';
 export interface WhatsAppConfig {
   id: string;
   user_id: string;
+  account_id?: string;
+  name?: string;
+  is_default?: boolean;
+  color?: string | null;
   provider?: WhatsAppProvider;
   api_url?: string | null;
   instance_name?: string | null;
@@ -280,15 +293,8 @@ export interface WhatsAppConfig {
   verify_token?: string;
   status: 'connected' | 'disconnected';
   connected_at?: string;
-  /**
-   * Set when POST /{phone_number_id}/register last succeeded. NULL
-   * means the number was saved but never actually subscribed for
-   * webhooks on Meta's side — inbound events will be silently lost.
-   */
   registered_at?: string;
-  /** Set when POST /{waba_id}/subscribed_apps last succeeded. */
   subscribed_apps_at?: string;
-  /** Last error from /register; cleared on success. */
   last_registration_error?: string;
 }
 

@@ -18,6 +18,11 @@ import {
   Send,
   Terminal,
   RefreshCw,
+  Plus,
+  Trash2,
+  Check,
+  Star,
+  Settings2,
 } from 'lucide-react';
 import type { MetaWhatsAppHealth } from '@/lib/whatsapp/meta-api';
 import { createClient } from '@/lib/supabase/client';
@@ -28,6 +33,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Switch } from '@/components/ui/switch';
 import { SettingsPanelHead } from './settings-panel-head';
 import {
   Accordion,
@@ -36,20 +42,25 @@ import {
   AccordionContent,
 } from '@/components/ui/accordion';
 import type { WhatsAppConfig as WhatsAppConfigType } from '@/types';
+import { cn } from '@/lib/utils';
 
 const MASKED_TOKEN = '••••••••••••••••';
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'unknown';
 type ResetReason = 'token_corrupted' | 'meta_api_error' | null;
 
+const COLOR_PRESETS = [
+  { label: 'Verde', value: '#25D366' },
+  { label: 'Azul', value: '#3B82F6' },
+  { label: 'Roxo', value: '#8B5CF6' },
+  { label: 'Laranja', value: '#F59E0B' },
+  { label: 'Rosa', value: '#EC4899' },
+  { label: 'Ciano', value: '#06B6D4' },
+];
+
 export function WhatsAppConfig() {
   const t = useTranslations('Settings.whatsapp');
   const supabase = createClient();
-  // After multi-user, whatsapp_config is one-row-per-account, not
-  // one-row-per-user. We pull `accountId` straight off the auth
-  // context and key every read off it — so a teammate who just
-  // joined an account sees the inviter's saved config without
-  // having to re-enter anything.
   const { user, accountId, loading: authLoading, profileLoading } = useAuth();
 
   const [loading, setLoading] = useState(true);
@@ -57,18 +68,16 @@ export function WhatsAppConfig() {
   const [testing, setTesting] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [showToken, setShowToken] = useState(false);
-  const [config, setConfig] = useState<WhatsAppConfigType | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('unknown');
-  const [resetReason, setResetReason] = useState<ResetReason>(null);
-  const [statusMessage, setStatusMessage] = useState<string>('');
-  // Guards against re-hydrating the form when the load effect below
-  // re-runs for reasons unrelated to actually switching accounts —
-  // e.g. Supabase's onAuthStateChange fires a token refresh (new
-  // `user` object, profileLoading flips true/false) when the browser
-  // tab regains focus. Without this, that churn calls fetchConfig()
-  // again and overwrites whatever the user typed but hadn't saved yet.
-  const loadedAccountIdRef = useRef<string | null>(null);
 
+  // Multi-instance state
+  const [configs, setConfigs] = useState<WhatsAppConfigType[]>([]);
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+  const [config, setConfig] = useState<WhatsAppConfigType | null>(null);
+
+  // Form fields
+  const [friendlyName, setFriendlyName] = useState('WhatsApp Principal');
+  const [color, setColor] = useState('#25D366');
+  const [isDefault, setIsDefault] = useState(false);
   const [provider, setProvider] = useState<'meta' | 'uazapi'>('meta');
   const [apiUrl, setApiUrl] = useState('');
   const [instanceName, setInstanceName] = useState('');
@@ -79,10 +88,13 @@ export function WhatsAppConfig() {
   const [pin, setPin] = useState('');
   const [tokenEdited, setTokenEdited] = useState(false);
 
-  // True once /register has succeeded on Meta's side (timestamp set
-  // in the row). When false, the saved config is metadata-only and
-  // Meta will silently drop every inbound event — that's the
-  // multi-number bug that prompted this work.
+  // Connection & registration
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('unknown');
+  const [resetReason, setResetReason] = useState<ResetReason>(null);
+  const [statusMessage, setStatusMessage] = useState<string>('');
+  const loadedAccountIdRef = useRef<string | null>(null);
+  const selectedInstanceIdRef = useRef<string | null>(null);
+
   const isRegistered = Boolean(config?.registered_at);
   const lastRegistrationError = config?.last_registration_error ?? null;
 
@@ -95,8 +107,7 @@ export function WhatsAppConfig() {
     registered_at?: string | null;
     subscribed_apps_at?: string | null;
   };
-  const [registrationProbe, setRegistrationProbe] =
-    useState<RegistrationProbe | null>(null);
+  const [registrationProbe, setRegistrationProbe] = useState<RegistrationProbe | null>(null);
 
   // Health Diagnostics & Webhook Simulator state
   const [healthData, setHealthData] = useState<MetaWhatsAppHealth | null>(null);
@@ -154,38 +165,84 @@ export function WhatsAppConfig() {
     }
   };
 
-  const fetchConfig = useCallback(async (acctId: string) => {
+  const populateFormWithConfig = (c: WhatsAppConfigType) => {
+    setConfig(c);
+    setSelectedInstanceId(c.id);
+    selectedInstanceIdRef.current = c.id;
+    setFriendlyName(c.name || 'WhatsApp');
+    setColor(c.color || '#25D366');
+    setIsDefault(Boolean(c.is_default));
+    setProvider(c.provider === 'uazapi' ? 'uazapi' : 'meta');
+    setApiUrl(c.api_url || '');
+    setInstanceName(c.instance_name || '');
+    setPhoneNumberId(c.phone_number_id || '');
+    setWabaId(c.waba_id || '');
+    setAccessToken(MASKED_TOKEN);
+    setVerifyToken('');
+    setPin('');
+    setTokenEdited(false);
+    setRegistrationProbe(null);
+  };
+
+  const fetchConfig = useCallback(async (acctId: string, targetId?: string) => {
     setLoading(true);
     try {
-      // Load form values from Supabase (shows what's in DB).
-      // Switched from `user_id` (which would only match the row's
-      // original author) to `account_id` so every member of the
-      // account sees the same saved configuration. UNIQUE(account_id)
-      // on the table guarantees the .maybeSingle() return type
-      // remains accurate.
       const { data, error } = await supabase
         .from('whatsapp_config')
         .select('*')
         .eq('account_id', acctId)
-        .maybeSingle();
+        .order('is_default', { ascending: false })
+        .order('created_at', { ascending: true });
 
       if (error) {
-        console.error('Failed to load config row:', error);
+        console.error('Failed to load configs:', error);
       }
 
-      if (data) {
-        setConfig(data);
-        setProvider(data.provider === 'uazapi' ? 'uazapi' : 'meta');
-        setApiUrl(data.api_url || '');
-        setInstanceName(data.instance_name || '');
-        setPhoneNumberId(data.phone_number_id || '');
-        setWabaId(data.waba_id || '');
-        setAccessToken(MASKED_TOKEN);
-        setVerifyToken('');
-        setPin('');
-        setTokenEdited(false);
+      const allConfigs = (data as WhatsAppConfigType[]) || [];
+      setConfigs(allConfigs);
+
+      let activeItem: WhatsAppConfigType | null = null;
+      const desiredId = targetId || selectedInstanceIdRef.current;
+      if (desiredId && desiredId !== 'new') {
+        activeItem = allConfigs.find((c) => c.id === desiredId) || null;
+      }
+      if (!activeItem && allConfigs.length > 0) {
+        activeItem = allConfigs.find((c) => c.is_default) || allConfigs[0];
+      }
+
+      if (activeItem) {
+        populateFormWithConfig(activeItem);
+
+        // Check health for active item
+        try {
+          const res = await fetch(`/api/whatsapp/config?id=${activeItem.id}`);
+          const payload = await res.json();
+          if (payload.connected) {
+            setConnectionStatus('connected');
+            setResetReason(null);
+            setStatusMessage('');
+          } else {
+            setConnectionStatus('disconnected');
+            setResetReason(
+              payload.needs_reset
+                ? 'token_corrupted'
+                : payload.reason === 'meta_api_error'
+                ? 'meta_api_error'
+                : null
+            );
+            setStatusMessage(payload.message || '');
+          }
+        } catch {
+          setConnectionStatus('disconnected');
+        }
       } else {
+        // No configs exist or user was creating new
+        setSelectedInstanceId('new');
+        selectedInstanceIdRef.current = 'new';
         setConfig(null);
+        setFriendlyName('WhatsApp Principal');
+        setColor('#25D366');
+        setIsDefault(true);
         setProvider('meta');
         setApiUrl('');
         setInstanceName('');
@@ -195,61 +252,32 @@ export function WhatsAppConfig() {
         setVerifyToken('');
         setPin('');
         setTokenEdited(false);
-      }
-      // Clear any stale probe result when reloading the row.
-      setRegistrationProbe(null);
+        setRegistrationProbe(null);
 
-      // Then verify health via the API (decrypts token + pings Meta)
-      if (data) {
+        // Check if global connection is used
         try {
-          const res = await fetch('/api/whatsapp/config', { method: 'GET' });
-          const payload = await res.json();
-
-          if (payload.connected) {
-            setConnectionStatus('connected');
-            setResetReason(null);
-            setStatusMessage('');
-          } else {
-            setConnectionStatus('disconnected');
-            setResetReason(payload.needs_reset ? 'token_corrupted' : payload.reason === 'meta_api_error' ? 'meta_api_error' : null);
-            setStatusMessage(payload.message || '');
-          }
-        } catch (err) {
-          console.error('Health check failed:', err);
-          setConnectionStatus('disconnected');
-        }
-      } else {
-        try {
-          const res = await fetch('/api/whatsapp/config', { method: 'GET' });
+          const res = await fetch('/api/whatsapp/config');
           const payload = await res.json();
           if (payload.connected && payload.using_global) {
             setConnectionStatus('connected');
-            setStatusMessage(payload.message || 'Usando Conexão WhatsApp Global da Plataforma');
+            setStatusMessage(payload.message || 'Usando Conexão WhatsApp Global');
           } else {
             setConnectionStatus('disconnected');
-            setResetReason(null);
             setStatusMessage('');
           }
         } catch {
           setConnectionStatus('disconnected');
-          setResetReason(null);
-          setStatusMessage('');
         }
       }
     } catch (err) {
       console.error('fetchConfig error:', err);
-      toast.error('Failed to load WhatsApp configuration');
+      toast.error('Falha ao carregar configurações do WhatsApp');
     } finally {
       setLoading(false);
     }
   }, [supabase]);
 
   useEffect(() => {
-    // Need both the auth session (`!authLoading`) AND the profile
-    // (`!profileLoading`, which carries `accountId`). Without the
-    // second guard, the effect would fire with `accountId === null`
-    // for the first render window and bail without ever retrying
-    // once the profile arrives.
     if (authLoading || profileLoading) return;
     if (!user || !accountId) {
       loadedAccountIdRef.current = null;
@@ -261,7 +289,98 @@ export function WhatsAppConfig() {
     fetchConfig(accountId);
   }, [authLoading, profileLoading, user, accountId, fetchConfig]);
 
+  const handleSelectInstance = (inst: WhatsAppConfigType) => {
+    populateFormWithConfig(inst);
+
+    fetch(`/api/whatsapp/config?id=${inst.id}`)
+      .then((res) => res.json())
+      .then((payload) => {
+        if (payload.connected) {
+          setConnectionStatus('connected');
+          setResetReason(null);
+          setStatusMessage('');
+        } else {
+          setConnectionStatus('disconnected');
+          setResetReason(
+            payload.needs_reset
+              ? 'token_corrupted'
+              : payload.reason === 'meta_api_error'
+              ? 'meta_api_error'
+              : null
+          );
+          setStatusMessage(payload.message || '');
+        }
+      })
+      .catch(() => {
+        setConnectionStatus('disconnected');
+      });
+  };
+
+  const handleAddNewInstance = () => {
+    setSelectedInstanceId('new');
+    selectedInstanceIdRef.current = 'new';
+    setConfig(null);
+    setFriendlyName(`WhatsApp ${configs.length + 1}`);
+    const nextColor = COLOR_PRESETS[configs.length % COLOR_PRESETS.length].value;
+    setColor(nextColor);
+    setIsDefault(configs.length === 0);
+    setProvider('uazapi');
+    setApiUrl('');
+    setInstanceName('');
+    setPhoneNumberId('');
+    setWabaId('');
+    setAccessToken('');
+    setVerifyToken('');
+    setPin('');
+    setTokenEdited(false);
+    setConnectionStatus('unknown');
+    setStatusMessage('');
+    setRegistrationProbe(null);
+  };
+
+  const handleSetDefault = async (id: string) => {
+    try {
+      const res = await fetch('/api/whatsapp/config', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, is_default: true }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Falha ao definir como padrão');
+      }
+      toast.success('Instância definida como padrão com sucesso!');
+      if (accountId) await fetchConfig(accountId, id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao atualizar');
+    }
+  };
+
+  const handleDeleteInstance = async (id: string, name: string) => {
+    if (!confirm(`Deseja realmente desconectar e remover a instância "${name}"?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/whatsapp/config?id=${id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Falha ao remover instância');
+      }
+      toast.success('Instância removida com sucesso!');
+      if (accountId) await fetchConfig(accountId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao remover');
+    }
+  };
+
   async function handleSave() {
+    if (!friendlyName.trim()) {
+      toast.error('Informe um nome para a instância / conexão');
+      return;
+    }
+
     if (provider === 'uazapi') {
       if (!apiUrl.trim()) {
         toast.error('A URL da API Uazapi é obrigatória');
@@ -272,7 +391,8 @@ export function WhatsAppConfig() {
       return;
     }
 
-    if (!config && (!accessToken.trim() || !tokenEdited)) {
+    const isNew = selectedInstanceId === 'new' || !config;
+    if (isNew && (!accessToken.trim() || !tokenEdited)) {
       toast.error(
         provider === 'uazapi'
           ? 'O Token da Instância Uazapi é obrigatório'
@@ -285,6 +405,9 @@ export function WhatsAppConfig() {
       setSaving(true);
 
       const payload: Record<string, unknown> = {
+        name: friendlyName.trim(),
+        color: color.trim() || '#25D366',
+        is_default: isDefault,
         provider,
         api_url: provider === 'uazapi' ? apiUrl.trim() : null,
         instance_name: provider === 'uazapi' ? instanceName.trim() || null : null,
@@ -294,10 +417,13 @@ export function WhatsAppConfig() {
         pin: pin.trim() || null,
       };
 
+      if (!isNew && config?.id) {
+        payload.id = config.id;
+      }
+
       if (tokenEdited && accessToken !== MASKED_TOKEN && accessToken.trim()) {
         payload.access_token = accessToken.trim();
       } else if (config) {
-        // Reuse existing stored encrypted token if not re-typed
         payload.access_token = accessToken.trim();
       }
 
@@ -315,40 +441,27 @@ export function WhatsAppConfig() {
         return;
       }
 
-      // The route now returns a structured outcome:
-      //   * registered=true   → number is live, events will flow
-      //   * registered=false  → credentials saved but /register
-      //                         failed; UI shows the specific error
-      //                         and a retry path. registration_error
-      //                         is human-readable from Meta.
       if (data.registered === false && data.registration_error) {
         toast.error(
-          `Saved, but Meta couldn't register the number: ${data.registration_error}`,
-          { duration: 12000 },
+          `Salvo, mas a Meta não pôde registrar o número: ${data.registration_error}`,
+          { duration: 12000 }
         );
       } else if (data.registration_skipped) {
-        // Credentials saved + verified, but /register was skipped
-        // because no PIN was supplied (e.g. a Meta test number).
-        // Don't claim the number is "Live" — point at the
-        // Registration status banner instead.
         toast.success(
-          'Credentials saved and verified. Inbound registration was skipped (no PIN) — see Registration status below.',
-          { duration: 10000 },
+          'Credenciais salvas e verificadas. O registro de webhook foi ignorado (sem PIN).',
+          { duration: 8000 }
         );
         setPin('');
       } else {
         toast.success(
           data.phone_info?.verified_name
-            ? `Live — ${data.phone_info.verified_name} can now receive events.`
-            : 'WhatsApp connected. Events will start flowing within a minute.',
+            ? `Conectado — ${data.phone_info.verified_name} agora pode receber e enviar mensagens.`
+            : 'WhatsApp conectado com sucesso!'
         );
-        // Clear the PIN so subsequent saves don't accidentally
-        // re-register (which would void the active subscription if
-        // the PIN became stale).
         setPin('');
       }
 
-      if (accountId) await fetchConfig(accountId);
+      if (accountId) await fetchConfig(accountId, config?.id);
     } catch (err) {
       console.error('Save error:', err);
       toast.error('Failed to save configuration');
@@ -368,7 +481,13 @@ export function WhatsAppConfig() {
           api_url: apiUrl.trim(),
           instance_name: instanceName.trim() || null,
           phone_number_id: phoneNumberId.trim() || null,
-          access_token: accessToken.trim(),
+          access_token:
+            tokenEdited && accessToken !== MASKED_TOKEN
+              ? accessToken.trim()
+              : config
+              ? undefined
+              : accessToken.trim(),
+          config_id: config?.id,
         }),
       });
 
@@ -381,19 +500,19 @@ export function WhatsAppConfig() {
         toast.success(
           payload.message ||
             (payload.phone_info?.verified_name
-              ? `Connected to ${payload.phone_info.verified_name}`
-              : 'API connection successful')
+              ? `Conectado a ${payload.phone_info.verified_name}`
+              : 'Conexão testada com sucesso!')
         );
       } else {
         setConnectionStatus('disconnected');
-        const errMsg = payload.error || payload.message || 'API connection failed';
+        const errMsg = payload.error || payload.message || 'Falha no teste de conexão';
         setStatusMessage(errMsg);
         toast.error(errMsg);
       }
     } catch (err) {
       console.error('Test connection error:', err);
       setConnectionStatus('disconnected');
-      toast.error('Connection test failed. Check network and try again.');
+      toast.error('Falha no teste de conexão. Verifique os dados e tente novamente.');
     } finally {
       setTesting(false);
     }
@@ -409,50 +528,43 @@ export function WhatsAppConfig() {
       const data = (await res.json()) as RegistrationProbe;
       setRegistrationProbe(data);
       if (data.live) {
-        toast.success('Number is fully wired — Meta is delivering events.');
+        toast.success('Número totalmente registrado — A Meta está entregando eventos.');
       } else {
         toast.error(
-          'Number is not fully registered. See the checks below for which step failed.',
-          { duration: 8000 },
+          'Número não está totalmente registrado. Veja o diagnóstico abaixo.',
+          { duration: 8000 }
         );
       }
-      if (accountId) await fetchConfig(accountId);
+      if (accountId) await fetchConfig(accountId, config?.id);
     } catch (err) {
       console.error('verify-registration failed:', err);
-      toast.error('Could not reach the verification endpoint.');
+      toast.error('Não foi possível consultar a verificação na Meta.');
     } finally {
       setVerifyingRegistration(false);
     }
   }
 
   async function handleReset() {
-    if (!confirm('This will delete the current WhatsApp config so you can re-enter it. Continue?')) {
+    if (!confirm('Isto removerá a configuração do WhatsApp atual. Deseja continuar?')) {
       return;
     }
 
     try {
       setResetting(true);
-      const res = await fetch('/api/whatsapp/config', { method: 'DELETE' });
+      const query = config?.id ? `?id=${config.id}` : '';
+      const res = await fetch(`/api/whatsapp/config${query}`, { method: 'DELETE' });
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.error || 'Failed to reset configuration');
+        toast.error(data.error || 'Falha ao remover configuração');
         return;
       }
 
-      toast.success('Configuration cleared. You can now re-enter your credentials.');
-      setConfig(null);
-      setPhoneNumberId('');
-      setWabaId('');
-      setAccessToken('');
-      setVerifyToken('');
-      setTokenEdited(false);
-      setConnectionStatus('disconnected');
-      setResetReason(null);
-      setStatusMessage('');
+      toast.success('Configuração removida com sucesso.');
+      if (accountId) await fetchConfig(accountId);
     } catch (err) {
       console.error('Reset error:', err);
-      toast.error('Failed to reset configuration');
+      toast.error('Falha ao remover configuração');
     } finally {
       setResetting(false);
     }
@@ -460,15 +572,15 @@ export function WhatsAppConfig() {
 
   function handleCopyWebhookUrl() {
     navigator.clipboard.writeText(webhookUrl);
-    toast.success('Webhook URL copied to clipboard');
+    toast.success('Webhook URL copiada para a área de transferência');
   }
 
   if (loading) {
     return (
       <section className="animate-in fade-in-50 duration-200">
         <SettingsPanelHead
-          title={t("title")}
-          description={t("description")}
+          title={t('title')}
+          description={t('description')}
         />
         <div className="flex items-center justify-center py-12">
           <Loader2 className="size-6 animate-spin text-primary" />
@@ -478,743 +590,915 @@ export function WhatsAppConfig() {
   }
 
   const showResetBanner = resetReason === 'token_corrupted';
+  const isCreatingNew = selectedInstanceId === 'new';
 
   return (
     <section className="animate-in fade-in-50 duration-200">
       <SettingsPanelHead
-        title={t("title")}
-        description={t("description")}
+        title={t('title')}
+        description={t('description')}
       />
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
-      {/* Main config form */}
-      <div className="space-y-6">
-        {/* Corrupted-token reset banner */}
-        {showResetBanner && (
-          <Alert className="bg-amber-950/40 border-amber-600/40">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="size-5 text-amber-400 mt-0.5 shrink-0" />
-              <div className="flex-1">
-                <AlertTitle className="text-amber-200 mb-1">
-                  Stored token can&apos;t be decrypted
-                </AlertTitle>
-                <AlertDescription className="text-amber-100/80 text-sm">
-                  {statusMessage}
-                </AlertDescription>
+        {/* Main config form */}
+        <div className="space-y-6">
+          {/* WhatsApp Instances Card */}
+          <Card className="border-border bg-card">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <CardTitle className="text-foreground text-base">
+                    Contas e Linhas de WhatsApp ({configs.length})
+                  </CardTitle>
+                  <CardDescription className="text-muted-foreground text-xs mt-0.5">
+                    Conecte múltiplos números do WhatsApp (Meta Cloud API ou Uazapi) no mesmo negócio.
+                  </CardDescription>
+                </div>
                 <Button
-                  onClick={handleReset}
-                  disabled={resetting}
+                  type="button"
                   size="sm"
-                  className="mt-3 bg-amber-600 hover:bg-amber-700 text-white"
+                  onClick={handleAddNewInstance}
+                  className="gap-1.5 bg-primary text-xs font-medium text-primary-foreground hover:bg-primary/90"
                 >
-                  {resetting ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      {t('resetting')}
-                    </>
-                  ) : (
-                    <>
-                      <RotateCcw className="size-4" />
-                      {t('resetConfig')}
-                    </>
-                  )}
+                  <Plus className="size-3.5" />
+                  <span>Conectar Outro WhatsApp</span>
                 </Button>
               </div>
-            </div>
-          </Alert>
-        )}
-
-        {/* Connection Status */}
-        <Alert className="bg-card border-border">
-          <div className="flex items-center gap-2">
-            {connectionStatus === 'connected' ? (
-              <CheckCircle2 className="size-4 text-primary" />
-            ) : (
-              <XCircle className="size-4 text-red-500" />
-            )}
-            <AlertTitle className="text-foreground mb-0">
-              {connectionStatus === 'connected' ? t('credentialsValid') : t('notConnected')}
-            </AlertTitle>
-          </div>
-          <AlertDescription className="text-muted-foreground">
-            {connectionStatus === 'connected'
-              ? t('connectedDesc')
-              : statusMessage ||
-                t('notConnectedDesc')}
-          </AlertDescription>
-        </Alert>
-
-        {/* Registration Status — the "is it actually live?" check.
-            Credentials being valid is necessary but not sufficient;
-            without a successful /register call the number won't
-            receive inbound events. Surface this dimension separately
-            so users don't trust a misleading green banner. */}
-        {config && (
-          <Alert
-            className={
-              isRegistered
-                ? 'bg-emerald-950/30 border-emerald-700/50'
-                : 'bg-amber-950/30 border-amber-700/50'
-            }
-          >
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2">
-                {isRegistered ? (
-                  <CheckCircle2 className="size-4 text-emerald-400" />
-                ) : (
-                  <AlertTriangle className="size-4 text-amber-400" />
-                )}
-                <AlertTitle
-                  className={
-                    'mb-0 ' + (isRegistered ? 'text-emerald-200' : 'text-amber-200')
-                  }
-                >
-                  {isRegistered
-                    ? t('registered')
-                    : t('notRegistered')}
-                </AlertTitle>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleVerifyRegistration}
-                disabled={verifyingRegistration}
-                className="border-border bg-transparent text-foreground hover:bg-muted h-7"
-              >
-                {verifyingRegistration ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <Zap className="size-3.5" />
-                )}
-                {t('verifyWithMeta')}
-              </Button>
-            </div>
-            <AlertDescription className="text-muted-foreground mt-2 text-xs leading-relaxed">
-              {isRegistered ? (
-                <span
-                  dangerouslySetInnerHTML={{
-                    __html: t('subscribedSince', {
-                      date: config.registered_at
-                        ? new Date(config.registered_at).toLocaleString()
-                        : t('unknownDate'),
-                    }),
-                  }}
-                />
-              ) : lastRegistrationError ? (
-                <>
-                  {t('lastAttemptFailed')}
-                  <span className="text-red-300">
-                    &quot;{lastRegistrationError}&quot;
-                  </span>
-                  . {t('retryHint')}
-                </>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {configs.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+                  Nenhuma conta do WhatsApp conectada ainda. Preencha as credenciais abaixo para conectar sua primeira instância.
+                </div>
               ) : (
-                <>{t('noRegistrationHint')}</>
-              )}
-            </AlertDescription>
+                <div className="space-y-2">
+                  {configs.map((c) => {
+                    const isSelected = selectedInstanceId === c.id;
+                    return (
+                      <div
+                        key={c.id}
+                        className={cn(
+                          'flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border transition-all',
+                          isSelected
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border bg-muted/30 hover:bg-muted/50'
+                        )}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span
+                            className="size-3.5 rounded-full shrink-0 ring-2 ring-background"
+                            style={{ backgroundColor: c.color || '#25D366' }}
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-sm text-foreground truncate">
+                                {c.name || 'WhatsApp'}
+                              </span>
+                              {c.is_default && (
+                                <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                                  <Star className="size-3 fill-current" />
+                                  Padrão
+                                </span>
+                              )}
+                              <span className="inline-flex items-center rounded bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground uppercase">
+                                {c.provider === 'uazapi' ? 'Uazapi' : 'Meta API'}
+                              </span>
+                            </div>
+                            <div className="text-xs text-muted-foreground font-mono truncate mt-0.5">
+                              {c.phone_number_id || c.instance_name || 'Sem identificador'}
+                            </div>
+                          </div>
+                        </div>
 
-            {registrationProbe && (
-              <div className="mt-3 rounded border border-border bg-card/60 px-3 py-2 space-y-1.5 text-[11px]">
-                <p className="font-medium text-foreground">
-                  {t('diagnosticLastRun')}
-                  <span className={registrationProbe.live ? 'text-emerald-400' : 'text-amber-400'}>
-                    {registrationProbe.live ? t('live') : t('notLive')}
-                  </span>
-                </p>
-                <ul className="space-y-0.5 text-muted-foreground">
-                  {Object.entries(registrationProbe.checks).map(([k, v]) => (
-                    <li key={k} className="flex items-center gap-1.5">
-                      {v === true ? (
-                        <CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
-                      ) : v === false ? (
-                        <XCircle className="size-3 text-red-400 shrink-0" />
-                      ) : (
-                        <span className="size-3 rounded-full border border-border shrink-0" />
-                      )}
-                      <code className="text-muted-foreground">{k}</code>
-                    </li>
-                  ))}
-                </ul>
-                {(registrationProbe.errors ?? []).length > 0 && (
-                  <ul className="pt-1 space-y-0.5 text-red-300">
-                    {registrationProbe.errors?.map((e, i) => (
-                      <li key={i}>• {e}</li>
+                        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                          {!c.is_default && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleSetDefault(c.id)}
+                              className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                            >
+                              Tornar Padrão
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            variant={isSelected ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => handleSelectInstance(c)}
+                            className="h-7 gap-1 text-xs"
+                          >
+                            <Settings2 className="size-3" />
+                            {isSelected ? 'Editando' : 'Editar'}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteInstance(c.id, c.name || 'WhatsApp')}
+                            className="h-7 px-2 text-red-400 hover:text-red-300 hover:bg-red-950/40"
+                            title="Desconectar"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Corrupted-token reset banner */}
+          {showResetBanner && (
+            <Alert className="bg-amber-950/40 border-amber-600/40">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="size-5 text-amber-400 mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <AlertTitle className="text-amber-200 mb-1">
+                    Token armazenado não pôde ser descriptografado
+                  </AlertTitle>
+                  <AlertDescription className="text-amber-100/80 text-sm">
+                    {statusMessage}
+                  </AlertDescription>
+                  <Button
+                    onClick={handleReset}
+                    disabled={resetting}
+                    size="sm"
+                    className="mt-3 bg-amber-600 hover:bg-amber-700 text-white"
+                  >
+                    {resetting ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        {t('resetting')}
+                      </>
+                    ) : (
+                      <>
+                        <RotateCcw className="size-4" />
+                        {t('resetConfig')}
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </Alert>
+          )}
+
+          {/* Connection Status */}
+          <Alert className="bg-card border-border">
+            <div className="flex items-center gap-2">
+              {connectionStatus === 'connected' ? (
+                <CheckCircle2 className="size-4 text-primary" />
+              ) : (
+                <XCircle className="size-4 text-red-500" />
+              )}
+              <AlertTitle className="text-foreground mb-0">
+                {connectionStatus === 'connected' ? t('credentialsValid') : t('notConnected')}
+              </AlertTitle>
+            </div>
+            <AlertDescription className="text-muted-foreground">
+              {connectionStatus === 'connected'
+                ? t('connectedDesc')
+                : statusMessage || t('notConnectedDesc')}
+            </AlertDescription>
+          </Alert>
+
+          {/* Registration Status (Meta only) */}
+          {config && provider === 'meta' && (
+            <Alert
+              className={
+                isRegistered
+                  ? 'bg-emerald-950/30 border-emerald-700/50'
+                  : 'bg-amber-950/30 border-amber-700/50'
+              }
+            >
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  {isRegistered ? (
+                    <CheckCircle2 className="size-4 text-emerald-400" />
+                  ) : (
+                    <AlertTriangle className="size-4 text-amber-400" />
+                  )}
+                  <AlertTitle
+                    className={
+                      'mb-0 ' + (isRegistered ? 'text-emerald-200' : 'text-amber-200')
+                    }
+                  >
+                    {isRegistered ? t('registered') : t('notRegistered')}
+                  </AlertTitle>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleVerifyRegistration}
+                  disabled={verifyingRegistration}
+                  className="border-border bg-transparent text-foreground hover:bg-muted h-7"
+                >
+                  {verifyingRegistration ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Zap className="size-3.5" />
+                  )}
+                  {t('verifyWithMeta')}
+                </Button>
+              </div>
+              <AlertDescription className="text-muted-foreground mt-2 text-xs leading-relaxed">
+                {isRegistered ? (
+                  <span
+                    dangerouslySetInnerHTML={{
+                      __html: t('subscribedSince', {
+                        date: config.registered_at
+                          ? new Date(config.registered_at).toLocaleString()
+                          : t('unknownDate'),
+                      }),
+                    }}
+                  />
+                ) : lastRegistrationError ? (
+                  <>
+                    {t('lastAttemptFailed')}
+                    <span className="text-red-300">
+                      &quot;{lastRegistrationError}&quot;
+                    </span>
+                    . {t('retryHint')}
+                  </>
+                ) : (
+                  <>{t('noRegistrationHint')}</>
+                )}
+              </AlertDescription>
+
+              {registrationProbe && (
+                <div className="mt-3 rounded border border-border bg-card/60 px-3 py-2 space-y-1.5 text-[11px]">
+                  <p className="font-medium text-foreground">
+                    {t('diagnosticLastRun')}
+                    <span className={registrationProbe.live ? 'text-emerald-400' : 'text-amber-400'}>
+                      {registrationProbe.live ? t('live') : t('notLive')}
+                    </span>
+                  </p>
+                  <ul className="space-y-0.5 text-muted-foreground">
+                    {Object.entries(registrationProbe.checks).map(([k, v]) => (
+                      <li key={k} className="flex items-center gap-1.5">
+                        {v === true ? (
+                          <CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
+                        ) : v === false ? (
+                          <XCircle className="size-3 text-red-400 shrink-0" />
+                        ) : (
+                          <span className="size-3 rounded-full border border-border shrink-0" />
+                        )}
+                        <code className="text-muted-foreground">{k}</code>
+                      </li>
                     ))}
                   </ul>
-                )}
-              </div>
-            )}
-          </Alert>
-        )}
+                  {(registrationProbe.errors ?? []).length > 0 && (
+                    <ul className="pt-1 space-y-0.5 text-red-300">
+                      {registrationProbe.errors?.map((e, i) => (
+                        <li key={i}>• {e}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </Alert>
+          )}
 
-        {/* API Credentials */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-foreground">{t('apiCredentialsTitle')}</CardTitle>
-            <CardDescription className="text-muted-foreground">
-              Escolha o provedor da API do WhatsApp (Meta Cloud API Oficial ou Uazapi) e informe as credenciais da instância.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Provider Selector */}
-            <div className="space-y-2">
-              <Label className="text-muted-foreground">Provedor de API do WhatsApp</Label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setProvider('meta')}
-                  className={`flex flex-col items-start p-3 rounded-lg border text-left transition-all ${
-                    provider === 'meta'
-                      ? 'border-primary bg-primary/10 text-foreground'
-                      : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
-                  }`}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <span className="font-semibold text-sm">Meta Cloud API (Oficial)</span>
-                    {provider === 'meta' && <CheckCircle2 className="size-4 text-primary" />}
-                  </div>
-                  <span className="text-xs text-muted-foreground mt-1">
-                    API oficial Graph API da Meta (WABA + Templates aprovados).
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setProvider('uazapi')}
-                  className={`flex flex-col items-start p-3 rounded-lg border text-left transition-all ${
-                    provider === 'uazapi'
-                      ? 'border-emerald-500 bg-emerald-500/10 text-foreground'
-                      : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
-                  }`}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <span className="font-semibold text-sm">Uazapi (API WhatsApp Segura)</span>
-                    {provider === 'uazapi' && <CheckCircle2 className="size-4 text-emerald-500" />}
-                  </div>
-                  <span className="text-xs text-muted-foreground mt-1">
-                    Conexão direta de alta performance via Uazapi (QR Code / Instância).
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            {provider === 'uazapi' ? (
-              <>
+          {/* API Credentials */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-foreground">
+                {isCreatingNew
+                  ? 'Conectar Nova Conta do WhatsApp'
+                  : `Configurar Instância: ${friendlyName}`}
+              </CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Defina o nome da linha, cor e informe as credenciais de acesso (Meta Cloud API ou Uazapi).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Instance Name & Color Selector */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-4 border-b border-border">
                 <div className="space-y-2">
-                  <Label className="text-muted-foreground">URL do Servidor Uazapi *</Label>
+                  <Label className="text-muted-foreground">Nome da Instância / Linha *</Label>
                   <Input
-                    placeholder="Ex: https://free.uazapi.com ou https://api.seudominio.com"
-                    value={apiUrl}
-                    onChange={(e) => setApiUrl(e.target.value)}
+                    placeholder="Ex: Comercial SP, Suporte, Principal"
+                    value={friendlyName}
+                    onChange={(e) => setFriendlyName(e.target.value)}
                     className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
                   />
                   <p className="text-xs text-muted-foreground">
-                    URL base do seu servidor Uazapi (sem barra no final).
+                    Nome identificador exibido no Inbox e na seleção de canais.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-muted-foreground">Nome da Instância (Opcional)</Label>
-                    <Input
-                      placeholder="Ex: comercial-principal"
-                      value={instanceName}
-                      onChange={(e) => setInstanceName(e.target.value)}
-                      className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">Cor de Identificação</Label>
+                  <div className="flex items-center gap-2 pt-1">
+                    {COLOR_PRESETS.map((p) => (
+                      <button
+                        key={p.value}
+                        type="button"
+                        onClick={() => setColor(p.value)}
+                        className={cn(
+                          'size-7 rounded-full transition-transform flex items-center justify-center',
+                          color === p.value
+                            ? 'scale-110 ring-2 ring-primary ring-offset-2 ring-offset-background'
+                            : 'opacity-80 hover:opacity-100'
+                        )}
+                        style={{ backgroundColor: p.value }}
+                        title={p.label}
+                      >
+                        {color === p.value && <Check className="size-3.5 text-white" />}
+                      </button>
+                    ))}
+                    <input
+                      type="color"
+                      value={color}
+                      onChange={(e) => setColor(e.target.value)}
+                      className="size-7 rounded cursor-pointer border-0 bg-transparent ml-1"
+                      title="Cor personalizada"
                     />
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Cor exibida na etiqueta e filtro do chat.
+                  </p>
+                </div>
+              </div>
 
+              {/* Default Instance Toggle */}
+              <div className="flex items-center justify-between py-2 border-b border-border">
+                <div className="space-y-0.5">
+                  <Label className="text-foreground text-sm font-medium">
+                    Definir como Linha Principal / Padrão
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Novas conversas sem canal especificado usarão esta conta automaticamente.
+                  </p>
+                </div>
+                <Switch
+                  checked={isDefault}
+                  onCheckedChange={setIsDefault}
+                />
+              </div>
+
+              {/* Provider Selector */}
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">Provedor de API do WhatsApp</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setProvider('meta')}
+                    className={`flex flex-col items-start p-3 rounded-lg border text-left transition-all ${
+                      provider === 'meta'
+                        ? 'border-primary bg-primary/10 text-foreground'
+                        : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="font-semibold text-sm">Meta Cloud API (Oficial)</span>
+                      {provider === 'meta' && <CheckCircle2 className="size-4 text-primary" />}
+                    </div>
+                    <span className="text-xs text-muted-foreground mt-1">
+                      API oficial Graph API da Meta (WABA + Templates aprovados).
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setProvider('uazapi')}
+                    className={`flex flex-col items-start p-3 rounded-lg border text-left transition-all ${
+                      provider === 'uazapi'
+                        ? 'border-emerald-500 bg-emerald-500/10 text-foreground'
+                        : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="font-semibold text-sm">Uazapi (API WhatsApp Segura)</span>
+                      {provider === 'uazapi' && <CheckCircle2 className="size-4 text-emerald-500" />}
+                    </div>
+                    <span className="text-xs text-muted-foreground mt-1">
+                      Conexão direta de alta performance via Uazapi (QR Code / Instância).
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {provider === 'uazapi' ? (
+                <>
                   <div className="space-y-2">
-                    <Label className="text-muted-foreground">Número WhatsApp / ID (Opcional)</Label>
+                    <Label className="text-muted-foreground">URL do Servidor Uazapi *</Label>
                     <Input
-                      placeholder="Ex: 5511999998888 (detectado automaticamente)"
+                      placeholder="Ex: https://free.uazapi.com ou https://api.seudominio.com"
+                      value={apiUrl}
+                      onChange={(e) => setApiUrl(e.target.value)}
+                      className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      URL base do seu servidor Uazapi (sem barra no final).
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground">Nome da Instância (Opcional)</Label>
+                      <Input
+                        placeholder="Ex: comercial-principal"
+                        value={instanceName}
+                        onChange={(e) => setInstanceName(e.target.value)}
+                        className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-muted-foreground">Número WhatsApp / ID (Opcional)</Label>
+                      <Input
+                        placeholder="Ex: 5511999998888 (detectado automaticamente)"
+                        value={phoneNumberId}
+                        onChange={(e) => setPhoneNumberId(e.target.value)}
+                        className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground">{t('phoneNumberId')}</Label>
+                    <Input
+                      placeholder="e.g. 100234567890123"
                       value={phoneNumberId}
                       onChange={(e) => setPhoneNumberId(e.target.value)}
                       className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
                     />
                   </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <Label className="text-muted-foreground">{t('phoneNumberId')}</Label>
-                  <Input
-                    placeholder="e.g. 100234567890123"
-                    value={phoneNumberId}
-                    onChange={(e) => setPhoneNumberId(e.target.value)}
-                    className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-                  />
-                </div>
 
-                <div className="space-y-2">
-                  <Label className="text-muted-foreground">{t('wabaId')}</Label>
-                  <Input
-                    placeholder="e.g. 100234567890456"
-                    value={wabaId}
-                    onChange={(e) => setWabaId(e.target.value)}
-                    className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-                  />
-                </div>
-              </>
-            )}
-
-            <div className="space-y-2">
-              <Label className="text-muted-foreground">
-                {provider === 'uazapi' ? 'Token da Instância Uazapi (token / apikey) *' : t('accessToken')}
-              </Label>
-              <div className="relative">
-                <Input
-                  type={showToken ? 'text' : 'password'}
-                  placeholder={
-                    provider === 'uazapi'
-                      ? 'Cole o token da sua instância Uazapi'
-                      : t('accessTokenPlaceholder')
-                  }
-                  value={accessToken}
-                  onChange={(e) => {
-                    setAccessToken(e.target.value);
-                    setTokenEdited(true);
-                  }}
-                  onFocus={() => {
-                    if (accessToken === MASKED_TOKEN) {
-                      setAccessToken('');
-                      setTokenEdited(true);
-                    }
-                  }}
-                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowToken(!showToken)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {showToken ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                </button>
-              </div>
-              {config && !tokenEdited && (
-                <p className="text-xs text-muted-foreground">
-                  {t('tokenHidden')}
-                </p>
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground">{t('wabaId')}</Label>
+                    <Input
+                      placeholder="e.g. 100234567890456"
+                      value={wabaId}
+                      onChange={(e) => setWabaId(e.target.value)}
+                      className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                    />
+                  </div>
+                </>
               )}
-            </div>
 
-            <div className="space-y-2">
-              <Label className="text-muted-foreground">{t('webhookVerifyToken')}</Label>
-              <Input
-                placeholder={t('webhookVerifyTokenPlaceholder')}
-                value={verifyToken}
-                onChange={(e) => setVerifyToken(e.target.value)}
-                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-              />
-              <p className="text-xs text-muted-foreground">
-                {provider === 'uazapi'
-                  ? 'Opcional — Ao salvar, o WACRM configura automaticamente o Webhook na sua instância Uazapi.'
-                  : t('webhookVerifyTokenHint')}
-              </p>
-            </div>
-
-            {provider === 'meta' && (
               <div className="space-y-2">
                 <Label className="text-muted-foreground">
-                  {t('twoStepPin')}
-                  <span className="ml-1 text-muted-foreground">{t('optional')}</span>
+                  {provider === 'uazapi' ? 'Token da Instância Uazapi (token / apikey) *' : t('accessToken')}
                 </Label>
+                <div className="relative">
+                  <Input
+                    type={showToken ? 'text' : 'password'}
+                    placeholder={
+                      provider === 'uazapi'
+                        ? 'Cole o token da sua instância Uazapi'
+                        : t('accessTokenPlaceholder')
+                    }
+                    value={accessToken}
+                    onChange={(e) => {
+                      setAccessToken(e.target.value);
+                      setTokenEdited(true);
+                    }}
+                    onFocus={() => {
+                      if (accessToken === MASKED_TOKEN) {
+                        setAccessToken('');
+                        setTokenEdited(true);
+                      }
+                    }}
+                    className="bg-muted border-border text-foreground placeholder:text-muted-foreground pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowToken(!showToken)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showToken ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  </button>
+                </div>
+                {config && !tokenEdited && (
+                  <p className="text-xs text-muted-foreground">
+                    {t('tokenHidden')}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">{t('webhookVerifyToken')}</Label>
                 <Input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  placeholder={t('pinPlaceholder')}
-                  value={pin}
-                  onChange={(e) =>
-                    setPin(e.target.value.replace(/\D/g, '').slice(0, 6))
-                  }
-                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground tracking-widest"
+                  placeholder={t('webhookVerifyTokenPlaceholder')}
+                  value={verifyToken}
+                  onChange={(e) => setVerifyToken(e.target.value)}
+                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
                 />
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  <span dangerouslySetInnerHTML={{ __html: t.raw('pinHint') }} />
+                <p className="text-xs text-muted-foreground">
+                  {provider === 'uazapi'
+                    ? 'Opcional — Ao salvar, o WACRM configura automaticamente o Webhook na sua instância Uazapi.'
+                    : t('webhookVerifyTokenHint')}
                 </p>
               </div>
-            )}
-          </CardContent>
-        </Card>
 
-        {/* Webhook URL */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-foreground">{t('webhookTitle')}</CardTitle>
-            <CardDescription className="text-muted-foreground">
-              {t('webhookDesc')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label className="text-muted-foreground">{t('webhookUrl')}</Label>
-              <div className="flex gap-2">
-                <Input
-                  readOnly
-                  value={webhookUrl}
-                  className="bg-muted border-border text-muted-foreground font-mono text-sm"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={handleCopyWebhookUrl}
-                  className="shrink-0 border-border text-muted-foreground hover:text-foreground hover:bg-muted"
-                >
-                  <Copy className="size-4" />
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Health & Diagnostic Cards */}
-        {config && (
-          <>
-            <Card className="border-border bg-card">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Activity className="size-4 text-primary" />
-                    <CardTitle className="text-foreground text-sm font-semibold">
-                      Diagnóstico de Conexão & Qualidade Meta
-                    </CardTitle>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={fetchHealth}
-                    disabled={loadingHealth}
-                    className="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    <RefreshCw className={`size-3.5 ${loadingHealth ? 'animate-spin' : ''}`} />
-                    Atualizar
-                  </Button>
-                </div>
-                <CardDescription className="text-muted-foreground text-xs">
-                  Métricas em tempo real sobre a classificação de qualidade do número e tiers da Graph API.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 pt-0">
-                {healthData ? (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <div className="rounded-md border border-border bg-muted/40 p-2.5">
-                      <div className="text-[11px] font-medium text-muted-foreground">Qualidade</div>
-                      <div className="mt-1 flex items-center gap-1.5">
-                        <span
-                          className={`inline-block size-2 rounded-full ${
-                            healthData.phone.quality_rating === 'GREEN'
-                              ? 'bg-green-500'
-                              : healthData.phone.quality_rating === 'YELLOW'
-                              ? 'bg-yellow-500'
-                              : 'bg-red-500'
-                          }`}
-                        />
-                        <span className="text-xs font-semibold text-foreground">
-                          {healthData.phone.quality_rating || 'GREEN'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="rounded-md border border-border bg-muted/40 p-2.5">
-                      <div className="text-[11px] font-medium text-muted-foreground">Limite / Tier</div>
-                      <div className="mt-1 text-xs font-semibold text-foreground truncate">
-                        {healthData.phone.messaging_limit_tier?.replace('TIER_', '') || '250'}/dia
-                      </div>
-                    </div>
-
-                    <div className="rounded-md border border-border bg-muted/40 p-2.5">
-                      <div className="text-[11px] font-medium text-muted-foreground">Nome Verificado</div>
-                      <div className="mt-1 text-xs font-semibold text-foreground truncate">
-                        {healthData.phone.verified_name || 'Configurado'}
-                      </div>
-                    </div>
-
-                    <div className="rounded-md border border-border bg-muted/40 p-2.5">
-                      <div className="text-[11px] font-medium text-muted-foreground">Webhook App</div>
-                      <div className="mt-1 flex items-center gap-1 text-xs font-semibold text-foreground">
-                        {healthData.webhook.isSubscribed ? (
-                          <>
-                            <CheckCircle2 className="size-3.5 text-green-500" />
-                            <span>Ativo</span>
-                          </>
-                        ) : (
-                          <>
-                            <XCircle className="size-3.5 text-yellow-500" />
-                            <span>Pendente</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between rounded-md border border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground">
-                    <span>Clique em &quot;Atualizar&quot; para consultar status de qualidade e limites na Meta.</span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={fetchHealth}
-                      disabled={loadingHealth}
-                      className="h-7 text-xs"
-                    >
-                      Consultar Meta
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Webhook Event Simulator Card */}
-            <Card className="border-border bg-card">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <Terminal className="size-4 text-primary" />
-                  <CardTitle className="text-foreground text-sm font-semibold">
-                    Simulador de Webhook & Automações
-                  </CardTitle>
-                </div>
-                <CardDescription className="text-muted-foreground text-xs">
-                  Simule o recebimento de mensagens sem gastar créditos da Meta para validar gatilhos, IA e fluxos.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 pt-0">
+              {provider === 'meta' && (
                 <div className="space-y-2">
+                  <Label className="text-muted-foreground">
+                    {t('twoStepPin')}
+                    <span className="ml-1 text-muted-foreground">{t('optional')}</span>
+                  </Label>
                   <Input
-                    placeholder="Digite a mensagem simulada..."
-                    value={simulateText}
-                    onChange={(e) => setSimulateText(e.target.value)}
-                    className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder={t('pinPlaceholder')}
+                    value={pin}
+                    onChange={(e) =>
+                      setPin(e.target.value.replace(/\D/g, '').slice(0, 6))
+                    }
+                    className="bg-muted border-border text-foreground placeholder:text-muted-foreground tracking-widest"
                   />
-                  <div className="flex items-center justify-between">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleSimulateWebhook}
-                      disabled={simulating || !simulateText}
-                      className="gap-1.5 text-xs"
-                    >
-                      {simulating ? (
-                        <>
-                          <Loader2 className="size-3.5 animate-spin" />
-                          Simulando...
-                        </>
-                      ) : (
-                        <>
-                          <Send className="size-3.5" />
-                          Disparar Mensagem Simulada
-                        </>
-                      )}
-                    </Button>
-                    {simulateStatus && (
-                      <span className="text-[11px] font-medium text-green-500 truncate max-w-xs">
-                        {simulateStatus}
-                      </span>
-                    )}
-                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    <span dangerouslySetInnerHTML={{ __html: t.raw('pinHint') }} />
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
+              )}
+            </CardContent>
+          </Card>
 
-            {/* Model Context Protocol (MCP) Server Card */}
-            <Card className="border-border bg-card">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Cpu className="size-4 text-primary" />
-                    <CardTitle className="text-foreground text-sm font-semibold">
-                      Servidor MCP WACRM (Model Context Protocol)
-                    </CardTitle>
-                  </div>
-                  <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                    JSON-RPC 2.0
-                  </span>
-                </div>
-                <CardDescription className="text-muted-foreground text-xs">
-                  Conecte agentes de IA externos (Claude, ChatGPT, Cursor, n8n) para gerenciar contatos, conversas e funis.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2 pt-0">
-                <div className="flex items-center gap-2">
+          {/* Webhook URL */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-foreground">{t('webhookTitle')}</CardTitle>
+              <CardDescription className="text-muted-foreground">
+                {t('webhookDesc')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">{t('webhookUrl')}</Label>
+                <div className="flex gap-2">
                   <Input
                     readOnly
-                    value={typeof window !== 'undefined' ? `${window.location.origin}/api/mcp` : '/api/mcp'}
-                    className="bg-muted border-border text-muted-foreground font-mono text-xs"
+                    value={webhookUrl}
+                    className="bg-muted border-border text-muted-foreground font-mono text-sm"
                   />
                   <Button
                     variant="outline"
                     size="icon"
-                    onClick={() => {
-                      if (typeof window !== 'undefined') {
-                        navigator.clipboard.writeText(`${window.location.origin}/api/mcp`);
-                        toast.success('Endpoint MCP copiado!');
-                      }
-                    }}
+                    onClick={handleCopyWebhookUrl}
                     className="shrink-0 border-border text-muted-foreground hover:text-foreground hover:bg-muted"
                   >
                     <Copy className="size-4" />
                   </Button>
                 </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Autenticação: Use uma <strong>Chave de API</strong> (gerada na aba Chaves de API) no cabeçalho <code className="text-primary font-mono">Authorization: Bearer wacrm_live_...</code>.
-                </p>
-              </CardContent>
-            </Card>
-          </>
-        )}
+              </div>
+            </CardContent>
+          </Card>
 
-        {/* Action Buttons */}
-        <div className="flex flex-wrap gap-3">
-          <Button
-            onClick={handleSave}
-            disabled={saving}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground"
-          >
-            {saving ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                {t('saving')}
-              </>
-            ) : (
-              t('saveConfig')
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleTestConnection}
-            disabled={testing || (provider === 'uazapi' ? !apiUrl.trim() : !phoneNumberId.trim())}
-            className="border-border text-muted-foreground hover:text-foreground hover:bg-muted"
-          >
-            {testing ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                {t('testing')}
-              </>
-            ) : (
-              <>
-                <Zap className="size-4" />
-                {t('testConnection')}
-              </>
-            )}
-          </Button>
+          {/* Health & Diagnostic Cards */}
           {config && (
+            <>
+              <Card className="border-border bg-card">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Activity className="size-4 text-primary" />
+                      <CardTitle className="text-foreground text-sm font-semibold">
+                        Diagnóstico de Conexão & Qualidade Meta
+                      </CardTitle>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={fetchHealth}
+                      disabled={loadingHealth}
+                      className="h-8 gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      <RefreshCw className={`size-3.5 ${loadingHealth ? 'animate-spin' : ''}`} />
+                      Atualizar
+                    </Button>
+                  </div>
+                  <CardDescription className="text-muted-foreground text-xs">
+                    Métricas em tempo real sobre a classificação de qualidade do número e tiers da Graph API.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0">
+                  {healthData ? (
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      <div className="rounded-md border border-border bg-muted/40 p-2.5">
+                        <div className="text-[11px] font-medium text-muted-foreground">Qualidade</div>
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <span
+                            className={`inline-block size-2 rounded-full ${
+                              healthData.phone.quality_rating === 'GREEN'
+                                ? 'bg-green-500'
+                                : healthData.phone.quality_rating === 'YELLOW'
+                                ? 'bg-yellow-500'
+                                : 'bg-red-500'
+                            }`}
+                          />
+                          <span className="text-xs font-semibold text-foreground">
+                            {healthData.phone.quality_rating || 'GREEN'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="rounded-md border border-border bg-muted/40 p-2.5">
+                        <div className="text-[11px] font-medium text-muted-foreground">Limite / Tier</div>
+                        <div className="mt-1 text-xs font-semibold text-foreground truncate">
+                          {healthData.phone.messaging_limit_tier?.replace('TIER_', '') || '250'}/dia
+                        </div>
+                      </div>
+
+                      <div className="rounded-md border border-border bg-muted/40 p-2.5">
+                        <div className="text-[11px] font-medium text-muted-foreground">Nome Verificado</div>
+                        <div className="mt-1 text-xs font-semibold text-foreground truncate">
+                          {healthData.phone.verified_name || 'Configurado'}
+                        </div>
+                      </div>
+
+                      <div className="rounded-md border border-border bg-muted/40 p-2.5">
+                        <div className="text-[11px] font-medium text-muted-foreground">Webhook App</div>
+                        <div className="mt-1 flex items-center gap-1 text-xs font-semibold text-foreground">
+                          {healthData.webhook.isSubscribed ? (
+                            <>
+                              <CheckCircle2 className="size-3.5 text-green-500" />
+                              <span>Ativo</span>
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="size-3.5 text-yellow-500" />
+                              <span>Pendente</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between rounded-md border border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground">
+                      <span>Clique em &quot;Atualizar&quot; para consultar status de qualidade e limites na Meta.</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={fetchHealth}
+                        disabled={loadingHealth}
+                        className="h-7 text-xs"
+                      >
+                        Consultar Meta
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Webhook Event Simulator Card */}
+              <Card className="border-border bg-card">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <Terminal className="size-4 text-primary" />
+                    <CardTitle className="text-foreground text-sm font-semibold">
+                      Simulador de Webhook & Automações
+                    </CardTitle>
+                  </div>
+                  <CardDescription className="text-muted-foreground text-xs">
+                    Simule o recebimento de mensagens sem gastar créditos da Meta para validar gatilhos, IA e fluxos.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0">
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Digite a mensagem simulada..."
+                      value={simulateText}
+                      onChange={(e) => setSimulateText(e.target.value)}
+                      className="bg-muted border-border text-xs text-foreground placeholder:text-muted-foreground"
+                    />
+                    <div className="flex items-center justify-between">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleSimulateWebhook}
+                        disabled={simulating || !simulateText}
+                        className="gap-1.5 text-xs"
+                      >
+                        {simulating ? (
+                          <>
+                            <Loader2 className="size-3.5 animate-spin" />
+                            Simulando...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="size-3.5" />
+                            Disparar Mensagem Simulada
+                          </>
+                        )}
+                      </Button>
+                      {simulateStatus && (
+                        <span className="text-[11px] font-medium text-green-500 truncate max-w-xs">
+                          {simulateStatus}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Model Context Protocol (MCP) Server Card */}
+              <Card className="border-border bg-card">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Cpu className="size-4 text-primary" />
+                      <CardTitle className="text-foreground text-sm font-semibold">
+                        Servidor MCP WACRM (Model Context Protocol)
+                      </CardTitle>
+                    </div>
+                    <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                      JSON-RPC 2.0
+                    </span>
+                  </div>
+                  <CardDescription className="text-muted-foreground text-xs">
+                    Conecte agentes de IA externos (Claude, ChatGPT, Cursor, n8n) para gerenciar contatos, conversas e funis.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2 pt-0">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      readOnly
+                      value={typeof window !== 'undefined' ? `${window.location.origin}/api/mcp` : '/api/mcp'}
+                      className="bg-muted border-border text-muted-foreground font-mono text-xs"
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => {
+                        if (typeof window !== 'undefined') {
+                          navigator.clipboard.writeText(`${window.location.origin}/api/mcp`);
+                          toast.success('Endpoint MCP copiado!');
+                        }
+                      }}
+                      className="shrink-0 border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                    >
+                      <Copy className="size-4" />
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Autenticação: Use uma <strong>Chave de API</strong> (gerada na aba Chaves de API) no cabeçalho <code className="text-primary font-mono">Authorization: Bearer wacrm_live_...</code>.
+                  </p>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-3">
             <Button
-              variant="outline"
-              onClick={handleReset}
-              disabled={resetting}
-              className="border-red-900 text-red-400 hover:text-red-300 hover:bg-red-950/40"
+              onClick={handleSave}
+              disabled={saving}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
             >
-              {resetting ? (
+              {saving ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />
-                  {t('resetting')}
+                  {t('saving')}
+                </>
+              ) : (
+                isCreatingNew ? 'Conectar e Salvar WhatsApp' : t('saveConfig')
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleTestConnection}
+              disabled={testing || (provider === 'uazapi' ? !apiUrl.trim() : !phoneNumberId.trim())}
+              className="border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+            >
+              {testing ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  {t('testing')}
                 </>
               ) : (
                 <>
-                  <RotateCcw className="size-4" />
-                  {t('resetConfig')}
+                  <Zap className="size-4" />
+                  {t('testConnection')}
                 </>
               )}
             </Button>
-          )}
+            {config && (
+              <Button
+                variant="outline"
+                onClick={handleReset}
+                disabled={resetting}
+                className="border-red-900 text-red-400 hover:text-red-300 hover:bg-red-950/40"
+              >
+                {resetting ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    {t('resetting')}
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="size-4" />
+                    Desconectar esta Instância
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Setup Instructions Sidebar */}
+        <div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-foreground text-base">{t('setupInstructions')}</CardTitle>
+              <CardDescription className="text-muted-foreground">
+                {t('setupInstructionsDesc')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Accordion>
+                <AccordionItem className="border-border">
+                  <AccordionTrigger className="text-muted-foreground hover:text-foreground hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">1</span>
+                      {t('step1')}
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="text-muted-foreground">
+                    <ol className="list-decimal list-inside space-y-1 text-sm">
+                      <li dangerouslySetInnerHTML={{ __html: t.raw('step1_1') }} />
+                      <li>{t('step1_2')}</li>
+                      <li>{t('step1_3')}</li>
+                      <li>{t('step1_4')}</li>
+                    </ol>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem className="border-border">
+                  <AccordionTrigger className="text-muted-foreground hover:text-foreground hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">2</span>
+                      {t('step2')}
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="text-muted-foreground">
+                    <ol className="list-decimal list-inside space-y-1 text-sm">
+                      <li>{t('step2_1')}</li>
+                      <li>{t('step2_2')}</li>
+                      <li>{t('step2_3')}</li>
+                    </ol>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem className="border-border">
+                  <AccordionTrigger className="text-muted-foreground hover:text-foreground hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">3</span>
+                      {t('step3')}
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="text-muted-foreground">
+                    <ol className="list-decimal list-inside space-y-1 text-sm">
+                      <li>{t('step3_1')}</li>
+                      <li dangerouslySetInnerHTML={{ __html: t.raw('step3_2') }} />
+                      <li dangerouslySetInnerHTML={{ __html: t.raw('step3_3') }} />
+                      <li dangerouslySetInnerHTML={{ __html: t.raw('step3_4') }} />
+                    </ol>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem className="border-border">
+                  <AccordionTrigger className="text-muted-foreground hover:text-foreground hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">4</span>
+                      {t('step4')}
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="text-muted-foreground">
+                    <ol className="list-decimal list-inside space-y-1 text-sm">
+                      <li>{t('step4_1')}</li>
+                      <li>{t('step4_2')}</li>
+                      <li dangerouslySetInnerHTML={{ __html: t.raw('step4_3') }} />
+                      <li dangerouslySetInnerHTML={{ __html: t.raw('step4_4') }} />
+                      <li>{t('step4_5')}</li>
+                    </ol>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+
+              <div className="mt-4 pt-4 border-t border-border">
+                <a
+                  href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors"
+                >
+                  <ExternalLink className="size-3.5" />
+                  {t('metaDocs')}
+                </a>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
-
-      {/* Setup Instructions Sidebar */}
-      <div>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-foreground text-base">{t('setupInstructions')}</CardTitle>
-            <CardDescription className="text-muted-foreground">
-              {t('setupInstructionsDesc')}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Accordion>
-              <AccordionItem className="border-border">
-                <AccordionTrigger className="text-muted-foreground hover:text-foreground hover:no-underline">
-                  <span className="flex items-center gap-2">
-                    <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">1</span>
-                    {t('step1')}
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">
-                  <ol className="list-decimal list-inside space-y-1 text-sm">
-                    <li dangerouslySetInnerHTML={{ __html: t.raw('step1_1') }} />
-                    <li>{t('step1_2')}</li>
-                    <li>{t('step1_3')}</li>
-                    <li>{t('step1_4')}</li>
-                  </ol>
-                </AccordionContent>
-              </AccordionItem>
-
-              <AccordionItem className="border-border">
-                <AccordionTrigger className="text-muted-foreground hover:text-foreground hover:no-underline">
-                  <span className="flex items-center gap-2">
-                    <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">2</span>
-                    {t('step2')}
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">
-                  <ol className="list-decimal list-inside space-y-1 text-sm">
-                    <li>{t('step2_1')}</li>
-                    <li>{t('step2_2')}</li>
-                    <li>{t('step2_3')}</li>
-                  </ol>
-                </AccordionContent>
-              </AccordionItem>
-
-              <AccordionItem className="border-border">
-                <AccordionTrigger className="text-muted-foreground hover:text-foreground hover:no-underline">
-                  <span className="flex items-center gap-2">
-                    <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">3</span>
-                    {t('step3')}
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">
-                  <ol className="list-decimal list-inside space-y-1 text-sm">
-                    <li>{t('step3_1')}</li>
-                    <li dangerouslySetInnerHTML={{ __html: t.raw('step3_2') }} />
-                    <li dangerouslySetInnerHTML={{ __html: t.raw('step3_3') }} />
-                    <li dangerouslySetInnerHTML={{ __html: t.raw('step3_4') }} />
-                  </ol>
-                </AccordionContent>
-              </AccordionItem>
-
-              <AccordionItem className="border-border">
-                <AccordionTrigger className="text-muted-foreground hover:text-foreground hover:no-underline">
-                  <span className="flex items-center gap-2">
-                    <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">4</span>
-                    {t('step4')}
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">
-                  <ol className="list-decimal list-inside space-y-1 text-sm">
-                    <li>{t('step4_1')}</li>
-                    <li>{t('step4_2')}</li>
-                    <li dangerouslySetInnerHTML={{ __html: t.raw('step4_3') }} />
-                    <li dangerouslySetInnerHTML={{ __html: t.raw('step4_4') }} />
-                    <li>{t('step4_5')}</li>
-                  </ol>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-
-            <div className="mt-4 pt-4 border-t border-border">
-              <a
-                href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors"
-              >
-                <ExternalLink className="size-3.5" />
-                {t('metaDocs')}
-              </a>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
     </section>
   );
 }

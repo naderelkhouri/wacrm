@@ -255,12 +255,29 @@ export async function sendMessageToConversation(
     );
   }
 
-  // WhatsApp config, account-scoped with global platform fallback
-  let { data: config } = await db
-    .from('whatsapp_config')
-    .select('*')
-    .eq('account_id', accountId)
-    .maybeSingle();
+  // WhatsApp config, account-scoped with multi-instance support and global platform fallback
+  let config: any = null;
+  if (conversation.whatsapp_config_id) {
+    const { data: specificConfig } = await db
+      .from('whatsapp_config')
+      .select('*')
+      .eq('id', conversation.whatsapp_config_id)
+      .eq('account_id', accountId)
+      .maybeSingle();
+    config = specificConfig;
+  }
+
+  if (!config) {
+    const { data: defaultConfig } = await db
+      .from('whatsapp_config')
+      .select('*')
+      .eq('account_id', accountId)
+      .order('is_default', { ascending: false })
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    config = defaultConfig;
+  }
 
   if (!config) {
     // Check if the platform has a global WhatsApp connection configured with tenant fallback enabled

@@ -950,10 +950,28 @@ export function MessageThread({
               )}
             </div>
             <div className="min-w-0">
-              <h2 className="flex items-center gap-1.5 truncate text-sm font-semibold text-foreground">
-                <span className="truncate">{displayName}</span>
-                <Info className="h-3.5 w-3.5 shrink-0 text-muted-foreground lg:hidden" />
-              </h2>
+              <div className="flex items-center gap-1.5">
+                <h2 className="flex items-center gap-1.5 truncate text-sm font-semibold text-foreground">
+                  <span className="truncate">{displayName}</span>
+                  <Info className="h-3.5 w-3.5 shrink-0 text-muted-foreground lg:hidden" />
+                </h2>
+                {conversation.whatsapp_instance?.name && (
+                  <span
+                    className="hidden sm:inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border border-border bg-muted/60 text-muted-foreground"
+                  >
+                    <span
+                      className="h-1.5 w-1.5 rounded-full shrink-0"
+                      style={{
+                        backgroundColor:
+                          conversation.whatsapp_instance.color || "#25D366",
+                      }}
+                    />
+                    <span className="truncate max-w-[120px]">
+                      {conversation.whatsapp_instance.name}
+                    </span>
+                  </span>
+                )}
+              </div>
               <p className="truncate text-xs text-muted-foreground">{contact.phone}</p>
             </div>
           </div>

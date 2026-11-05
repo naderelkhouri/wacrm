@@ -43,6 +43,38 @@ export function NewConversationDialog({
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // WhatsApp instances
+  const [configs, setConfigs] = useState<
+    Array<{
+      id: string;
+      name: string;
+      color: string;
+      phone_number_id?: string;
+      instance_name?: string;
+      is_default?: boolean;
+    }>
+  >([]);
+  const [selectedConfigId, setSelectedConfigId] = useState<string>("");
+
+  const fetchConfigs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/whatsapp/config");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.configs) && data.configs.length > 0) {
+          setConfigs(data.configs);
+          const def =
+            data.configs.find(
+              (c: { is_default?: boolean }) => c.is_default
+            ) || data.configs[0];
+          if (def) setSelectedConfigId(def.id);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch configs:", err);
+    }
+  }, []);
+
   const fetchContacts = useCallback(async () => {
     setLoadingContacts(true);
     try {
@@ -68,6 +100,7 @@ export function NewConversationDialog({
   useEffect(() => {
     if (open) {
       fetchContacts();
+      fetchConfigs();
     } else {
       setSelectedContact(null);
       setMessage("");
@@ -76,7 +109,7 @@ export function NewConversationDialog({
       setNewPhone("");
       setMode("existing");
     }
-  }, [open, fetchContacts]);
+  }, [open, fetchContacts, fetchConfigs]);
 
   const filteredContacts = useMemo(() => {
     if (!search.trim()) return contacts;
@@ -140,6 +173,7 @@ export function NewConversationDialog({
           contact_id: targetContactId,
           message_type: "text",
           content_text: trimmedMsg,
+          whatsapp_config_id: selectedConfigId || undefined,
         }),
       });
 
@@ -305,6 +339,50 @@ export function NewConversationDialog({
                     required
                   />
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* WhatsApp Channel Selector (Multi-Instance) */}
+          {configs.length > 1 && (
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">
+                Enviar através do WhatsApp:
+              </Label>
+              <div className="grid grid-cols-1 gap-2 max-h-36 overflow-y-auto rounded-lg border border-border p-1 bg-muted/20">
+                {configs.map((c) => {
+                  const isSelected = selectedConfigId === c.id;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setSelectedConfigId(c.id)}
+                      className={`flex w-full items-center justify-between p-2 text-left text-xs transition-colors rounded-md border ${
+                        isSelected
+                          ? "border-primary bg-primary/10 text-primary font-medium"
+                          : "border-transparent bg-muted/40 text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: c.color || "#25D366" }}
+                        />
+                        <span className="truncate font-medium text-foreground">
+                          {c.name}
+                        </span>
+                        {c.is_default && (
+                          <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                            Padrão
+                          </span>
+                        )}
+                      </div>
+                      <span className="shrink-0 text-[11px] font-mono text-muted-foreground">
+                        {c.phone_number_id || c.instance_name || ""}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}

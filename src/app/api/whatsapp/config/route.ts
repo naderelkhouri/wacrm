@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import {
@@ -70,7 +70,7 @@ function supabaseAdmin() {
  *   { connected: false, reason: 'token_corrupted',  message: '...', needs_reset: true }
  *   { connected: false, reason: 'meta_api_error',   message: '...' }
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createClient()
 
@@ -95,21 +95,25 @@ export async function GET() {
       )
     }
 
-    const { data: config, error: configError } = await supabase
+    const url = new URL(request.url)
+    const requestedId = url.searchParams.get('id')
+
+    const { data: configs, error: configError } = await supabase
       .from('whatsapp_config')
-      .select('provider, api_url, instance_name, phone_number_id, access_token, status')
+      .select('id, name, is_default, color, provider, api_url, instance_name, phone_number_id, waba_id, status, connected_at, registered_at, subscribed_apps_at, last_registration_error, access_token, created_at')
       .eq('account_id', accountId)
-      .maybeSingle()
+      .order('is_default', { ascending: false })
+      .order('created_at', { ascending: true })
 
     if (configError) {
       console.error('Error fetching whatsapp_config:', configError)
       return NextResponse.json(
-        { connected: false, reason: 'db_error', message: 'Failed to fetch configuration' },
+        { connected: false, reason: 'db_error', message: 'Failed to fetch configuration', configs: [] },
         { status: 200 }
       )
     }
 
-    if (!config) {
+    if (!configs || configs.length === 0) {
       // Check if global platform WhatsApp connection exists and has fallback enabled
       const { data: globalRow } = await supabase
         .from('platform_settings')
@@ -126,6 +130,7 @@ export async function GET() {
             provider: (globalVal.provider as string) || 'meta',
             phone_number_id: globalVal.phone_number_id,
             phone_info: globalVal.phone_info || null,
+            configs: [],
             message: 'Esta organização está utilizando a Conexão WhatsApp Global da plataforma.',
           },
           { status: 200 },
@@ -137,16 +142,35 @@ export async function GET() {
           connected: false,
           reason: 'no_config',
           message: 'No WhatsApp configuration saved yet. Fill in the form and click Save Configuration.',
+          configs: [],
         },
         { status: 200 }
       )
     }
 
-    // Try to decrypt the stored token with the current ENCRYPTION_KEY.
-    // If this fails, the key changed (or was never consistent across envs).
+    const sanitizedConfigs = configs.map((c) => ({
+      id: c.id,
+      name: c.name || 'WhatsApp',
+      is_default: Boolean(c.is_default),
+      color: c.color || '#25D366',
+      provider: c.provider,
+      api_url: c.api_url,
+      instance_name: c.instance_name,
+      phone_number_id: c.phone_number_id,
+      waba_id: c.waba_id,
+      status: c.status,
+      connected_at: c.connected_at,
+      registered_at: c.registered_at,
+      subscribed_apps_at: c.subscribed_apps_at,
+      last_registration_error: c.last_registration_error,
+      created_at: c.created_at,
+    }))
+
+    const activeConfig = (requestedId ? configs.find((c) => c.id === requestedId) : null) || configs[0]
+
     let accessToken: string
     try {
-      accessToken = decrypt(config.access_token)
+      accessToken = decrypt(activeConfig.access_token)
     } catch (err) {
       console.error('[whatsapp/config GET] Token decryption failed:', err)
       return NextResponse.json(
@@ -154,27 +178,31 @@ export async function GET() {
           connected: false,
           reason: 'token_corrupted',
           needs_reset: true,
+          activeConfig: sanitizedConfigs.find((c) => c.id === activeConfig.id),
+          configs: sanitizedConfigs,
           message:
-            'The stored access token cannot be decrypted with the current ENCRYPTION_KEY. This usually means the key changed, or it differs between environments (local vs Hostinger vs Vercel). Click "Reset Configuration" below, then re-save.',
+            'The stored access token cannot be decrypted with the current ENCRYPTION_KEY. Click "Reset Configuration" below, then re-save.',
         },
         { status: 200 }
       )
     }
 
-    if (config.provider === 'uazapi' && config.api_url) {
+    if (activeConfig.provider === 'uazapi' && activeConfig.api_url) {
       try {
         const phoneInfo = await verifyUazapiInstance({
-          apiUrl: config.api_url as string,
+          apiUrl: activeConfig.api_url as string,
           instanceToken: accessToken,
-          instanceName: (config.instance_name as string) || null,
-          fallbackPhoneId: config.phone_number_id,
+          instanceName: (activeConfig.instance_name as string) || null,
+          fallbackPhoneId: activeConfig.phone_number_id,
         })
         return NextResponse.json({
           connected: true,
           provider: 'uazapi',
-          api_url: config.api_url,
-          instance_name: config.instance_name,
+          api_url: activeConfig.api_url,
+          instance_name: activeConfig.instance_name,
           phone_info: phoneInfo,
+          activeConfig: sanitizedConfigs.find((c) => c.id === activeConfig.id),
+          configs: sanitizedConfigs,
         })
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown Uazapi error'
@@ -185,6 +213,8 @@ export async function GET() {
             provider: 'uazapi',
             reason: 'meta_api_error',
             message: `Uazapi API error: ${message}`,
+            activeConfig: sanitizedConfigs.find((c) => c.id === activeConfig.id),
+            configs: sanitizedConfigs,
           },
           { status: 200 }
         )
@@ -194,10 +224,16 @@ export async function GET() {
     // Validate credentials against Meta
     try {
       const phoneInfo = await verifyPhoneNumber({
-        phoneNumberId: config.phone_number_id,
+        phoneNumberId: activeConfig.phone_number_id,
         accessToken,
       })
-      return NextResponse.json({ connected: true, provider: 'meta', phone_info: phoneInfo })
+      return NextResponse.json({
+        connected: true,
+        provider: 'meta',
+        phone_info: phoneInfo,
+        activeConfig: sanitizedConfigs.find((c) => c.id === activeConfig.id),
+        configs: sanitizedConfigs,
+      })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown Meta API error'
       console.error('[whatsapp/config GET] Meta API verification failed:', message)
@@ -206,6 +242,8 @@ export async function GET() {
           connected: false,
           reason: 'meta_api_error',
           message: `Meta API rejected the credentials: ${message}`,
+          activeConfig: sanitizedConfigs.find((c) => c.id === activeConfig.id),
+          configs: sanitizedConfigs,
         },
         { status: 200 }
       )
@@ -248,6 +286,10 @@ export async function POST(request: Request) {
 
     const body = await request.json()
     const {
+      id: instanceId,
+      name: instanceNameInput,
+      is_default: isDefaultInput,
+      color: instanceColorInput,
       provider: rawProvider,
       api_url,
       instance_name,
@@ -258,18 +300,37 @@ export async function POST(request: Request) {
       pin,
     } = body
 
+    const targetInstanceId = instanceId ? String(instanceId).trim() : null
+    let existingConfig: { id: string; access_token?: string } | null = null
+    if (targetInstanceId) {
+      const { data } = await supabaseAdmin()
+        .from('whatsapp_config')
+        .select('id, access_token')
+        .eq('id', targetInstanceId)
+        .eq('account_id', accountId)
+        .maybeSingle()
+      existingConfig = data
+    }
+
+    const { count: existingCount } = await supabaseAdmin()
+      .from('whatsapp_config')
+      .select('id', { count: 'exact', head: true })
+      .eq('account_id', accountId)
+
+    const willBeDefault = (existingCount === 0 || existingCount === null) || (isDefaultInput === true)
+    if (willBeDefault) {
+      await supabaseAdmin()
+        .from('whatsapp_config')
+        .update({ is_default: false })
+        .eq('account_id', accountId)
+    }
+
     const provider = rawProvider === 'uazapi' ? 'uazapi' : 'meta'
 
     if (provider === 'uazapi') {
       let resolvedToken = (access_token && String(access_token).trim()) || ''
 
       if (!resolvedToken || resolvedToken === '••••••••••••••••') {
-        const { data: existingConfig } = await supabaseAdmin()
-          .from('whatsapp_config')
-          .select('access_token')
-          .eq('account_id', accountId)
-          .maybeSingle()
-
         if (existingConfig?.access_token) {
           try {
             resolvedToken = decrypt(existingConfig.access_token)
@@ -351,6 +412,9 @@ export async function POST(request: Request) {
 
       const nowIso = new Date().toISOString()
       const uazRow = {
+        name: (instanceNameInput && String(instanceNameInput).trim()) || (instance_name ? String(instance_name).trim() : (phoneInfo.instance_name || 'WhatsApp Uazapi')),
+        is_default: willBeDefault,
+        color: (instanceColorInput && String(instanceColorInput).trim()) || '#25D366',
         provider: 'uazapi' as const,
         api_url: normalizedApiUrl,
         instance_name: instance_name ? String(instance_name).trim() : (phoneInfo.instance_name || null),
@@ -366,16 +430,11 @@ export async function POST(request: Request) {
         updated_at: nowIso,
       }
 
-      const { data: existingUaz } = await supabase
-        .from('whatsapp_config')
-        .select('id')
-        .eq('account_id', accountId)
-        .maybeSingle()
-
-      if (existingUaz) {
+      if (existingConfig) {
         const { error: updErr } = await supabase
           .from('whatsapp_config')
           .update(uazRow)
+          .eq('id', existingConfig.id)
           .eq('account_id', accountId)
         if (updErr) {
           console.error('Error updating Uazapi whatsapp_config:', updErr)
@@ -409,12 +468,6 @@ export async function POST(request: Request) {
     let resolvedMetaToken = (access_token && String(access_token).trim()) || ''
 
     if (!resolvedMetaToken || resolvedMetaToken === '••••••••••••••••') {
-      const { data: existingConfig } = await supabaseAdmin()
-        .from('whatsapp_config')
-        .select('access_token')
-        .eq('account_id', accountId)
-        .maybeSingle()
-
       if (existingConfig?.access_token) {
         try {
           resolvedMetaToken = decrypt(existingConfig.access_token)
@@ -591,6 +644,9 @@ export async function POST(request: Request) {
     // store the credentials and the error so the UI can guide the
     // user through a retry.
     const baseRow = {
+      name: (instanceNameInput && String(instanceNameInput).trim()) || (phoneInfo?.verified_name || `WhatsApp ${phone_number_id}`),
+      is_default: willBeDefault,
+      color: (instanceColorInput && String(instanceColorInput).trim()) || '#25D366',
       provider: 'meta' as const,
       api_url: null,
       instance_name: null,
@@ -606,10 +662,11 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     }
 
-    if (existing) {
+    if (existingConfig) {
       const { error: updateError } = await supabase
         .from('whatsapp_config')
         .update(baseRow)
+        .eq('id', existingConfig.id)
         .eq('account_id', accountId)
 
       if (updateError) {
@@ -621,9 +678,7 @@ export async function POST(request: Request) {
       }
     } else {
       // Insert with both columns: `account_id` is the tenancy key
-      // (NOT NULL post-017, UNIQUE so duplicates trip the constraint
-      // up-front), `user_id` is the audit column identifying which
-      // member of the account saved the config.
+      // `user_id` is the audit column identifying which member saved the config.
       const { error: insertError } = await supabase
         .from('whatsapp_config')
         .insert({
@@ -672,13 +727,74 @@ export async function POST(request: Request) {
 }
 
 /**
+ * PATCH /api/whatsapp/config
+ *
+ * Update instance metadata (name, color, is_default).
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const accountId = await resolveAccountId(supabase, user)
+    if (!accountId) {
+      return NextResponse.json(
+        { error: 'Your profile is not linked to an account.' },
+        { status: 403 }
+      )
+    }
+
+    const body = await request.json()
+    const { id, name, color, is_default } = body
+    if (!id) {
+      return NextResponse.json({ error: 'Instance id is required' }, { status: 400 })
+    }
+
+    if (is_default === true) {
+      await supabaseAdmin()
+        .from('whatsapp_config')
+        .update({ is_default: false })
+        .eq('account_id', accountId)
+    }
+
+    const updatePayload: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    }
+    if (typeof name === 'string' && name.trim()) updatePayload.name = name.trim()
+    if (typeof color === 'string' && color.trim()) updatePayload.color = color.trim()
+    if (typeof is_default === 'boolean') updatePayload.is_default = is_default
+
+    const { error: updErr } = await supabaseAdmin()
+      .from('whatsapp_config')
+      .update(updatePayload)
+      .eq('id', id)
+      .eq('account_id', accountId)
+
+    if (updErr) {
+      console.error('Error updating instance:', updErr)
+      return NextResponse.json({ error: 'Failed to update instance' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error('Error in PATCH /api/whatsapp/config:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+/**
  * DELETE /api/whatsapp/config
  *
- * Removes the authenticated user's WhatsApp configuration row.
- * Used by the "Reset Configuration" button to recover from a corrupted
- * encrypted token (mismatched ENCRYPTION_KEY across environments).
+ * Removes a specific instance (if ?id= is given) or all instances for the account.
  */
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   try {
     const supabase = await createClient()
 
@@ -697,6 +813,55 @@ export async function DELETE() {
         { error: 'Your profile is not linked to an account.' },
         { status: 403 },
       )
+    }
+
+    const url = new URL(request.url)
+    const targetId = url.searchParams.get('id')
+
+    if (targetId) {
+      const { data: rowToDelete } = await supabaseAdmin()
+        .from('whatsapp_config')
+        .select('id, is_default')
+        .eq('id', targetId)
+        .eq('account_id', accountId)
+        .maybeSingle()
+
+      if (!rowToDelete) {
+        return NextResponse.json({ error: 'Instance not found' }, { status: 404 })
+      }
+
+      const { error: deleteError } = await supabaseAdmin()
+        .from('whatsapp_config')
+        .delete()
+        .eq('id', targetId)
+        .eq('account_id', accountId)
+
+      if (deleteError) {
+        console.error('Error deleting whatsapp_config instance:', deleteError)
+        return NextResponse.json(
+          { error: 'Failed to delete configuration' },
+          { status: 500 }
+        )
+      }
+
+      if (rowToDelete.is_default) {
+        const { data: nextInstance } = await supabaseAdmin()
+          .from('whatsapp_config')
+          .select('id')
+          .eq('account_id', accountId)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle()
+
+        if (nextInstance) {
+          await supabaseAdmin()
+            .from('whatsapp_config')
+            .update({ is_default: true })
+            .eq('id', nextInstance.id)
+        }
+      }
+
+      return NextResponse.json({ success: true })
     }
 
     const { error: deleteError } = await supabase

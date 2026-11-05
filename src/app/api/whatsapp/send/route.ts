@@ -86,6 +86,7 @@ export async function POST(request: Request) {
       // yet (Contact detail → Send template) — we find-or-create one below.
       conversation_id: conversationIdInput,
       contact_id,
+      whatsapp_config_id,
       message_type,
       content_text,
       media_url,
@@ -135,7 +136,7 @@ export async function POST(request: Request) {
     if (conversationIdInput) {
       const { data, error: convError } = await supabase
         .from('conversations')
-        .select('id')
+        .select('id, whatsapp_config_id')
         .eq('id', conversationIdInput)
         .eq('account_id', accountId)
         .single()
@@ -147,6 +148,14 @@ export async function POST(request: Request) {
         )
       }
       conversationId = data.id
+
+      // If a specific WhatsApp instance was requested and differs, update it
+      if (whatsapp_config_id && data.whatsapp_config_id !== whatsapp_config_id) {
+        void supabase
+          .from('conversations')
+          .update({ whatsapp_config_id })
+          .eq('id', data.id)
+      }
     } else {
       // contact_id path: verify the contact is in this account first so a
       // caller can't open a conversation against someone else's contact.
@@ -168,7 +177,8 @@ export async function POST(request: Request) {
         supabase,
         accountId,
         user.id,
-        contact_id
+        contact_id,
+        whatsapp_config_id
       )
       if (!resolved) {
         return NextResponse.json(
@@ -243,15 +253,24 @@ async function findOrCreateConversation(
   accountId: string,
   userId: string,
   contactId: string,
+  whatsappConfigId?: string,
 ): Promise<string | null> {
   const { data: existing } = await supabase
     .from('conversations')
-    .select('id')
+    .select('id, whatsapp_config_id')
     .eq('account_id', accountId)
     .eq('contact_id', contactId)
     .maybeSingle()
 
-  if (existing) return existing.id
+  if (existing) {
+    if (whatsappConfigId && existing.whatsapp_config_id !== whatsappConfigId) {
+      void supabase
+        .from('conversations')
+        .update({ whatsapp_config_id: whatsappConfigId })
+        .eq('id', existing.id)
+    }
+    return existing.id
+  }
 
   const { data: created, error } = await supabase
     .from('conversations')
@@ -259,6 +278,7 @@ async function findOrCreateConversation(
       account_id: accountId,
       user_id: userId,
       contact_id: contactId,
+      ...(whatsappConfigId ? { whatsapp_config_id: whatsappConfigId } : {}),
     })
     .select('id')
     .single()

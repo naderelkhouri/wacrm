@@ -61,6 +61,7 @@ export async function POST(request: Request) {
       instance_name,
       phone_number_id,
       access_token,
+      config_id,
     } = body;
 
     const provider = rawProvider === 'uazapi' ? 'uazapi' : 'meta';
@@ -68,11 +69,18 @@ export async function POST(request: Request) {
     // Resolve access token (supports reusing existing encrypted token if masked)
     let tokenToTest = (typeof access_token === 'string' && access_token.trim()) || '';
     if (!tokenToTest || tokenToTest === '••••••••••••••••') {
-      const { data: existingConfig } = await supabaseAdmin()
+      let query = supabaseAdmin()
         .from('whatsapp_config')
         .select('access_token')
-        .eq('account_id', accountId)
-        .maybeSingle();
+        .eq('account_id', accountId);
+
+      if (config_id) {
+        query = query.eq('id', config_id);
+      } else {
+        query = query.order('is_default', { ascending: false }).limit(1);
+      }
+
+      const { data: existingConfig } = await query.maybeSingle();
 
       if (existingConfig?.access_token) {
         try {
