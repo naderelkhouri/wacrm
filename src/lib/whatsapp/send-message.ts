@@ -52,6 +52,7 @@ import {
 import type { MessageTemplate } from '@/types';
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard';
 import { recordTelemetryEvent } from '@/lib/telemetry/telemetry-service';
+import { resolveWhatsAppConfig } from './resolve-config';
 
 export const MEDIA_KINDS = ['image', 'video', 'document', 'audio'] as const;
 export const VALID_MESSAGE_TYPES = [
@@ -258,54 +259,10 @@ export async function sendMessageToConversation(
   }
 
   // WhatsApp config, account-scoped with multi-instance support and global platform fallback
-  let config: any = null;
-  const targetConfigId = whatsappConfigId || conversation.whatsapp_config_id;
-  if (targetConfigId) {
-    const { data: specificConfig } = await db
-      .from('whatsapp_config')
-      .select('*')
-      .eq('id', targetConfigId)
-      .eq('account_id', accountId)
-      .maybeSingle();
-    config = specificConfig;
-  }
-
-  if (!config) {
-    const { data: defaultConfig } = await db
-      .from('whatsapp_config')
-      .select('*')
-      .eq('account_id', accountId)
-      .order('is_default', { ascending: false })
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    config = defaultConfig;
-  }
-
-  if (!config) {
-    // Check if the platform has a global WhatsApp connection configured with tenant fallback enabled
-    const { data: globalRow } = await db
-      .from('platform_settings')
-      .select('value')
-      .eq('key', 'global_whatsapp_config')
-      .maybeSingle();
-
-    const globalVal = (globalRow?.value as Record<string, unknown>) || {};
-    if (globalVal.phone_number_id && globalVal.encrypted_access_token && globalVal.allow_tenant_fallback) {
-      config = {
-        id: 'global',
-        account_id: accountId,
-        provider: (globalVal.provider as string) || 'meta',
-        api_url: (globalVal.api_url as string) || null,
-        instance_name: (globalVal.instance_name as string) || null,
-        phone_number_id: globalVal.phone_number_id as string,
-        waba_id: (globalVal.waba_id as string) || null,
-        access_token: globalVal.encrypted_access_token as string,
-        verify_token: (globalVal.encrypted_verify_token as string) || null,
-        status: 'connected',
-      };
-    }
-  }
+  const config = await resolveWhatsAppConfig(db, accountId, {
+    whatsappConfigId,
+    conversationId,
+  });
 
   if (!config) {
     throw new SendMessageError(

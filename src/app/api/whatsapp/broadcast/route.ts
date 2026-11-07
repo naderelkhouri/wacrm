@@ -5,6 +5,7 @@ import { sendUazapiTemplateMessage } from '@/lib/whatsapp/uazapi'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import type { SendTimeParams } from '@/lib/whatsapp/template-send-builder'
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard'
+import { resolveWhatsAppConfig } from '@/lib/whatsapp/resolve-config'
 import {
   sanitizePhoneForMeta,
   isValidE164,
@@ -173,13 +174,11 @@ export async function POST(request: Request) {
       )
     }
 
-    const { data: config, error: configError } = await supabase
-      .from('whatsapp_config')
-      .select('*')
-      .eq('account_id', accountId)
-      .single()
+    const config = await resolveWhatsAppConfig(supabase, accountId, {
+      whatsappConfigId: body.whatsapp_config_id,
+    })
 
-    if (configError || !config) {
+    if (!config) {
       return NextResponse.json(
         {
           error:

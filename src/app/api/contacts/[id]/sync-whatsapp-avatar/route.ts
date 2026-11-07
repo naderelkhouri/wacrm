@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
 import { decrypt } from '@/lib/whatsapp/encryption';
 import { fetchUazapiProfilePictureUrl } from '@/lib/whatsapp/uazapi';
+import { resolveWhatsAppConfig } from '@/lib/whatsapp/resolve-config';
 import { ensureAccountForUser } from '@/lib/auth/ensure-account';
 
 export async function POST(
@@ -63,13 +64,9 @@ export async function POST(
     }
 
     // Fetch account's WhatsApp config
-    const { data: config, error: configError } = await supabaseAdmin()
-      .from('whatsapp_config')
-      .select('provider, api_url, instance_name, access_token, status')
-      .eq('account_id', accountId)
-      .maybeSingle();
+    const config = await resolveWhatsAppConfig(supabaseAdmin(), accountId);
 
-    if (configError || !config) {
+    if (!config) {
       return NextResponse.json(
         {
           success: false,

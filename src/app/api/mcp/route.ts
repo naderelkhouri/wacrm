@@ -5,6 +5,8 @@ import { supabaseAdmin } from '@/lib/flows/admin-client'
 import { findActiveKeyByHash, touchLastUsed } from '@/lib/api-keys/store'
 import { hashApiKey, looksLikeApiKey } from '@/lib/api-keys/keys'
 import { getWhatsAppHealthDetails, sendTextMessage } from '@/lib/whatsapp/meta-api'
+import { sendUazapiTextMessage } from '@/lib/whatsapp/uazapi'
+import { resolveWhatsAppConfig } from '@/lib/whatsapp/resolve-config'
 import { decrypt } from '@/lib/whatsapp/encryption'
 
 interface MCPContext {
@@ -192,7 +194,7 @@ async function handleToolCall(name: string, args: Record<string, unknown>, ctx: 
         supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('account_id', accountId),
         supabase.from('deals').select('value, status').eq('account_id', accountId),
         supabase.from('conversations').select('id, unread_count').eq('account_id', accountId),
-        supabase.from('whatsapp_config').select('phone_number_id, is_connected').eq('account_id', accountId).maybeSingle(),
+        supabase.from('whatsapp_config').select('phone_number_id, status').eq('account_id', accountId).order('is_default', { ascending: false }).limit(1).maybeSingle(),
       ])
 
       const totalContacts = contactsRes.count ?? 0
@@ -207,7 +209,7 @@ async function handleToolCall(name: string, args: Record<string, unknown>, ctx: 
         total_unread_messages: totalUnread,
         open_deals_count: openDeals.length,
         open_deals_value: totalDealsValue,
-        whatsapp_connected: Boolean(configRes.data?.is_connected),
+        whatsapp_connected: configRes.data?.status === 'connected',
       }
     }
 
@@ -315,23 +317,28 @@ async function handleToolCall(name: string, args: Record<string, unknown>, ctx: 
 
       if (!contact) throw new Error('Contact not found')
 
-      const { data: config } = await supabase
-        .from('whatsapp_config')
-        .select('phone_number_id, access_token_encrypted')
-        .eq('account_id', accountId)
-        .maybeSingle()
+      const config = await resolveWhatsAppConfig(supabase, accountId)
 
-      if (!config?.access_token_encrypted || !config?.phone_number_id) {
-        throw new Error('WhatsApp Cloud API is not configured on this account')
+      if (!config) {
+        throw new Error('WhatsApp is not configured on this account')
       }
 
-      const accessToken = decrypt(config.access_token_encrypted)
-      const res = await sendTextMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
-        to: contact.phone,
-        text: String(args.message || ''),
-      })
+      const accessToken = decrypt(config.access_token)
+      const res =
+        config.provider === 'uazapi' && config.api_url
+          ? await sendUazapiTextMessage({
+              apiUrl: config.api_url,
+              instanceToken: accessToken,
+              instanceName: config.instance_name || null,
+              to: contact.phone,
+              text: String(args.message || ''),
+            })
+          : await sendTextMessage({
+              phoneNumberId: config.phone_number_id,
+              accessToken,
+              to: contact.phone,
+              text: String(args.message || ''),
+            })
 
       // Insert message record into database
       await supabase.from('messages').insert({

@@ -30,6 +30,7 @@ import {
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard';
 import type { MessageTemplate } from '@/types';
 import { findOrCreateContact } from '@/lib/api/v1/contacts';
+import { resolveWhatsAppConfig } from './resolve-config';
 
 /** Thrown by createBroadcast on a caller-visible failure; route maps it. */
 export class BroadcastError extends Error {
@@ -52,6 +53,7 @@ export interface BroadcastRecipientInput {
 
 export interface CreateBroadcastParams {
   name?: string | null;
+  whatsappConfigId?: string | null;
   templateName: string;
   templateLanguage?: string | null;
   recipients: BroadcastRecipientInput[];
@@ -115,12 +117,10 @@ export async function createBroadcast(
 
   // Config (fail fast + provides the audit trail owner already resolved
   // by the caller). Meta send needs phone_number_id + decrypted token.
-  const { data: config, error: configError } = await db
-    .from('whatsapp_config')
-    .select('*')
-    .eq('account_id', accountId)
-    .single();
-  if (configError || !config) {
+  const config = await resolveWhatsAppConfig(db, accountId, {
+    whatsappConfigId: params.whatsappConfigId,
+  });
+  if (!config) {
     throw new BroadcastError(
       'whatsapp_not_configured',
       'WhatsApp not configured. Please set up your WhatsApp integration first.',
