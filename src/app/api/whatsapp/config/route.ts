@@ -411,12 +411,25 @@ export async function POST(request: Request) {
       })
 
       const nowIso = new Date().toISOString()
+
+      // Resolve matching Uazapi shard node by api_url
+      let resolvedNodeId: string | null = null
+      const { data: matchedNode } = await supabaseAdmin()
+        .from('uazapi_nodes')
+        .select('id')
+        .eq('api_url', normalizedApiUrl)
+        .maybeSingle()
+      if (matchedNode?.id) {
+        resolvedNodeId = matchedNode.id
+      }
+
       const uazRow = {
         name: (instanceNameInput && String(instanceNameInput).trim()) || (instance_name ? String(instance_name).trim() : (phoneInfo.instance_name || 'WhatsApp Uazapi')),
         is_default: willBeDefault,
         color: (instanceColorInput && String(instanceColorInput).trim()) || '#25D366',
         provider: 'uazapi' as const,
         api_url: normalizedApiUrl,
+        node_id: resolvedNodeId,
         instance_name: instance_name ? String(instance_name).trim() : (phoneInfo.instance_name || null),
         phone_number_id: resolvedPhoneNumberId,
         waba_id: waba_id ? String(waba_id).trim() : 'uazapi',

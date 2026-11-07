@@ -22,6 +22,7 @@ import {
   UserCheck,
   Lock,
   TrendingUp,
+  Layers,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +55,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { AdminGlobalWhatsAppPanel } from "@/components/admin/admin-global-whatsapp-panel";
 import { AdminTelemetryDashboard } from "@/components/admin/admin-telemetry-dashboard";
+import { AdminUazapiNodesPanel } from "@/components/admin/admin-uazapi-nodes-panel";
 
 interface OverviewMetrics {
   total_tenants: number;
@@ -477,6 +479,10 @@ export default function AdminPage() {
             <Radio className="h-4 w-4 text-emerald-500" />
             {t("tabGlobalWhatsapp")}
           </TabsTrigger>
+          <TabsTrigger value="uazapi-shards" className="gap-2">
+            <Layers className="h-4 w-4 text-emerald-500" />
+            Shards Uazapi (300)
+          </TabsTrigger>
           <TabsTrigger value="telemetry" className="gap-2">
             <Activity className="h-4 w-4 text-emerald-500" />
             {t("tabTelemetry")}
@@ -864,7 +870,12 @@ export default function AdminPage() {
           <AdminGlobalWhatsAppPanel />
         </TabsContent>
 
-        {/* Tab 5: Telemetry & Autonomous Self-Healing */}
+        {/* Tab 5: Uazapi Sharding Pools & 300-Slot Nodes */}
+        <TabsContent value="uazapi-shards" className="space-y-4">
+          <AdminUazapiNodesPanel />
+        </TabsContent>
+
+        {/* Tab 6: Telemetry & Autonomous Self-Healing */}
         <TabsContent value="telemetry" className="space-y-4">
           <AdminTelemetryDashboard />
         </TabsContent>

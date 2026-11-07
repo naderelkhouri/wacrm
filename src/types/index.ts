@@ -284,6 +284,7 @@ export interface WhatsAppConfig {
   name?: string;
   is_default?: boolean;
   color?: string | null;
+  node_id?: string | null;
   provider?: WhatsAppProvider;
   api_url?: string | null;
   instance_name?: string | null;
@@ -296,6 +297,23 @@ export interface WhatsAppConfig {
   registered_at?: string;
   subscribed_apps_at?: string;
   last_registration_error?: string;
+}
+
+export interface UazapiNodeTelemetry {
+  id: string;
+  name: string;
+  api_url: string;
+  admin_token?: string | null;
+  max_capacity: number;
+  status: 'active' | 'near_capacity' | 'full' | 'maintenance' | 'offline';
+  is_accepting_new: boolean;
+  region?: string | null;
+  created_at: string;
+  updated_at: string;
+  total_instances: number;
+  connected_instances: number;
+  remaining_slots: number;
+  occupancy_pct: number;
 }
 
 // Raw Meta status enum. We persist this verbatim from Meta (sync + webhook)
