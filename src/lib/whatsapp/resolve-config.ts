@@ -68,15 +68,33 @@ export async function resolveWhatsAppConfig(
   }
 
   if (!config) {
-    const { data } = await db
+    const res = await db
       .from('whatsapp_config')
       .select('*')
       .eq('account_id', accountId)
       .order('is_default', { ascending: false })
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    if (data) config = data as unknown as ResolvedWhatsAppConfig;
+      .order('created_at', { ascending: true });
+
+    const raw = res?.data;
+    if (raw) {
+      if (Array.isArray(raw) && raw.length > 0) {
+        // Prioritize unofficial API (Uazapi) instances over Meta official
+        // while respecting explicitly configured default instances when connected.
+        const defaultUazapi = raw.find(
+          (c) => c.provider === 'uazapi' && c.is_default && c.status === 'connected'
+        );
+        const connectedUazapi = raw.find(
+          (c) => c.provider === 'uazapi' && c.status === 'connected'
+        );
+        const anyUazapi = raw.find((c) => c.provider === 'uazapi');
+        const defaultAny = raw.find((c) => c.is_default);
+
+        config = (defaultUazapi || connectedUazapi || anyUazapi || defaultAny || raw[0]) as unknown as ResolvedWhatsAppConfig;
+      } else if (!Array.isArray(raw)) {
+        // Handle mocks or single-record wrappers
+        config = raw as unknown as ResolvedWhatsAppConfig;
+      }
+    }
   }
 
   if (!config) {

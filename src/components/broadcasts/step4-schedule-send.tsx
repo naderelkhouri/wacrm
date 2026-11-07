@@ -6,6 +6,14 @@ import { MessageTemplate } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { cn } from '@/lib/utils';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -14,7 +22,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { ArrowLeft, Send, Loader2, Users, Save } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, Users, Save, Radio } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 interface AudienceConfig {
@@ -23,11 +31,22 @@ interface AudienceConfig {
   csvContacts?: { phone: string; name?: string }[];
 }
 
+export interface WhatsAppInstanceOption {
+  id: string;
+  name?: string | null;
+  phone_number_id: string;
+  provider: 'meta' | 'uazapi';
+  status: string;
+  is_default: boolean;
+}
+
 interface Step4Props {
   name: string;
   onNameChange: (name: string) => void;
   template: MessageTemplate;
   audience: AudienceConfig;
+  selectedConfigId?: string | null;
+  onSelectedConfigIdChange?: (id: string | null) => void;
   onSend: () => void;
   onSaveDraft?: () => void;
   onBack: () => void;
@@ -41,6 +60,8 @@ export function Step4ScheduleSend({
   onNameChange,
   template,
   audience,
+  selectedConfigId,
+  onSelectedConfigIdChange,
   onSend,
   onSaveDraft,
   onBack,
@@ -52,6 +73,44 @@ export function Step4ScheduleSend({
   const [showConfirm, setShowConfirm] = useState(false);
   const [estimatedReach, setEstimatedReach] = useState<number>(0);
   const [loadingReach, setLoadingReach] = useState(true);
+  const [instances, setInstances] = useState<WhatsAppInstanceOption[]>([]);
+  const [loadingInstances, setLoadingInstances] = useState(true);
+
+  useEffect(() => {
+    async function loadInstances() {
+      setLoadingInstances(true);
+      try {
+        const supabase = createClient();
+        const { data } = await supabase
+          .from('whatsapp_config')
+          .select('id, name, phone_number_id, provider, status, is_default')
+          .order('is_default', { ascending: false })
+          .order('created_at', { ascending: true });
+
+        const list = (data || []) as WhatsAppInstanceOption[];
+        setInstances(list);
+
+        if (!selectedConfigId && list.length > 0 && onSelectedConfigIdChange) {
+          // Prioritize unofficial (uazapi) as requested, or default
+          const preferred =
+            list.find((i) => i.provider === 'uazapi' && i.is_default && i.status === 'connected') ||
+            list.find((i) => i.provider === 'uazapi' && i.status === 'connected') ||
+            list.find((i) => i.provider === 'uazapi') ||
+            list.find((i) => i.is_default) ||
+            list[0];
+          if (preferred) {
+            onSelectedConfigIdChange(preferred.id);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load whatsapp instances:', err);
+      } finally {
+        setLoadingInstances(false);
+      }
+    }
+
+    loadInstances();
+  }, [onSelectedConfigIdChange, selectedConfigId]);
 
   useEffect(() => {
     async function calculateReach() {
@@ -113,6 +172,61 @@ export function Step4ScheduleSend({
           className="border-border bg-muted text-foreground placeholder:text-muted-foreground"
         />
       </div>
+
+      {/* WhatsApp Sender Instance */}
+      {instances.length > 0 && (
+        <div className="rounded-xl border border-border bg-card/50 p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-foreground flex items-center gap-2">
+              <Radio className="h-4 w-4 text-primary" />
+              <span>Canal de Envio (Instância do WhatsApp)</span>
+            </label>
+            <span className="text-xs font-medium">
+              {instances.find((i) => i.id === selectedConfigId)?.provider === 'uazapi' ? (
+                <span className="text-emerald-500 font-medium">⚡ Não oficial (Uazapi) - Prioritária</span>
+              ) : (
+                <span className="text-blue-500 font-medium">🛡️ Oficial (Meta Cloud API)</span>
+              )}
+            </span>
+          </div>
+          <Select
+            value={selectedConfigId || (instances[0]?.id ?? '')}
+            onValueChange={(val) => onSelectedConfigIdChange?.(val)}
+          >
+            <SelectTrigger className="w-full border-border bg-muted text-foreground">
+              <SelectValue placeholder="Selecione o número de WhatsApp" />
+            </SelectTrigger>
+            <SelectContent className="border-border bg-popover">
+              {instances.map((inst) => (
+                <SelectItem key={inst.id} value={inst.id}>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{inst.name || inst.phone_number_id}</span>
+                    <span className="text-xs text-muted-foreground">({inst.phone_number_id})</span>
+                    <span
+                      className={cn(
+                        'text-[10px] px-1.5 py-0.5 rounded-full font-mono',
+                        inst.provider === 'uazapi'
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+                      )}
+                    >
+                      {inst.provider === 'uazapi' ? 'Uazapi' : 'Meta Oficial'}
+                    </span>
+                    {inst.is_default && (
+                      <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                        Padrão
+                      </span>
+                    )}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Você pode disparar utilizando tanto a API Não Oficial (Uazapi) quanto a API Oficial da Meta.
+          </p>
+        </div>
+      )}
 
       {/* Summary Card */}
       <div className="rounded-xl border border-border bg-card/50 p-4 space-y-3">
