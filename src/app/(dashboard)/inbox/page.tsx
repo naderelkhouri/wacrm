@@ -331,11 +331,17 @@ function InboxPageInner() {
                 ? {
                     ...c,
                     ...conv,
+                    whatsapp_instance:
+                      (conv as unknown as { whatsapp_instance?: Conversation["whatsapp_instance"] })
+                        .whatsapp_instance ?? c.whatsapp_instance,
                     unread_count: isActive ? 0 : conv.unread_count,
                   }
                 : c,
             ),
           );
+          if (conv.whatsapp_config_id && conv.whatsapp_config_id !== activeConversation?.whatsapp_config_id) {
+            hydrateConversation(conv.id);
+          }
         } else {
           // UPDATE arrived before the INSERT (or after a missed INSERT)
           // — fetch the row so it surfaces with its contact joined. The
@@ -347,7 +353,15 @@ function InboxPageInner() {
         // Update active conversation if it changed
         if (activeConversation && conv.id === activeConversation.id) {
           setActiveConversation((prev) =>
-            prev ? { ...prev, ...conv } : prev
+            prev
+              ? {
+                  ...prev,
+                  ...conv,
+                  whatsapp_instance:
+                    (conv as unknown as { whatsapp_instance?: Conversation["whatsapp_instance"] })
+                      .whatsapp_instance ?? prev.whatsapp_instance,
+                }
+              : prev
           );
         }
       }
@@ -569,6 +583,23 @@ function InboxPageInner() {
     [activeConversation]
   );
 
+  const handleInstanceChange = useCallback(
+    (convId: string, instanceId: string) => {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === convId ? { ...c, whatsapp_config_id: instanceId } : c
+        )
+      );
+      if (activeConversation?.id === convId) {
+        setActiveConversation((prev) =>
+          prev ? { ...prev, whatsapp_config_id: instanceId } : prev
+        );
+      }
+      hydrateConversation(convId);
+    },
+    [activeConversation?.id, hydrateConversation]
+  );
+
   const handleAssignChange = useCallback(
     (conversationId: string, assignedAgentId: string | null) => {
       setConversations((prev) =>
@@ -660,6 +691,7 @@ function InboxPageInner() {
             onRefresh={handleManualRefresh}
             contactPanelOpen={contactPanelOpen}
             onToggleContactPanel={handleToggleContactPanel}
+            onInstanceChange={handleInstanceChange}
           />
         </div>
 

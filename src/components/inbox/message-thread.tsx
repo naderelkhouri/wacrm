@@ -118,6 +118,7 @@ interface MessageThreadProps {
   contactPanelOpen?: boolean;
   onToggleContactPanel?: () => void;
   whatsappProvider?: string | null;
+  onInstanceChange?: (conversationId: string, instanceId: string) => void;
 }
 
 const DATE_LOCALES: Record<string, typeof ptBR> = {
@@ -188,6 +189,7 @@ export function MessageThread({
   contactPanelOpen,
   onToggleContactPanel,
   whatsappProvider,
+  onInstanceChange,
 }: MessageThreadProps) {
   const isUazapi = whatsappProvider === "uazapi";
   const t = useTranslations("Inbox.messageThread");
@@ -204,6 +206,58 @@ export function MessageThread({
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [reactions, setReactions] = useState<MessageReaction[]>([]);
   const [mobileContactOpen, setMobileContactOpen] = useState(false);
+  const [instances, setInstances] = useState<{ id: string; name: string; color: string; phone_number_id?: string }[]>([]);
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(conversation?.whatsapp_config_id || null);
+
+  useEffect(() => {
+    setSelectedInstanceId(conversation?.whatsapp_config_id || null);
+  }, [conversation?.id, conversation?.whatsapp_config_id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/whatsapp/config");
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled && Array.isArray(data.configs)) {
+            setInstances(
+              data.configs.map((c: { id: string; name?: string; color?: string; phone_number_id?: string }) => ({
+                id: c.id,
+                name: c.name || "WhatsApp",
+                color: c.color || "#25D366",
+                phone_number_id: c.phone_number_id,
+              }))
+            );
+          }
+        }
+      } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [resyncToken]);
+
+  const handleInstanceSelect = async (newInstanceId: string) => {
+    if (!conversation || newInstanceId === selectedInstanceId) return;
+    const targetInst = instances.find((i) => i.id === newInstanceId);
+    setSelectedInstanceId(newInstanceId);
+
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("conversations")
+      .update({ whatsapp_config_id: newInstanceId })
+      .eq("id", conversation.id);
+
+    if (error) {
+      toast.error("Falha ao trocar canal de envio");
+      setSelectedInstanceId(conversation.whatsapp_config_id || null);
+      return;
+    }
+
+    toast.success(`Canal alterado para ${targetInst?.name || "WhatsApp"}`);
+    onInstanceChange?.(conversation.id, newInstanceId);
+  };
   // Purely visual spin state for the manual-refresh button. The actual
   // refetch is fire-and-forget through `onRefresh` (which bumps the
   // parent's resyncToken); the 700ms spin is just feedback so the click
@@ -503,6 +557,7 @@ export function MessageThread({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             conversation_id: conversation.id,
+            whatsapp_config_id: selectedInstanceId || conversation.whatsapp_config_id || undefined,
             message_type: "text",
             content_text: text,
             reply_to_message_id: replyToId,
@@ -567,6 +622,7 @@ export function MessageThread({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             conversation_id: conversation.id,
+            whatsapp_config_id: selectedInstanceId || conversation.whatsapp_config_id || undefined,
             message_type: payload.kind,
             media_url: payload.mediaUrl,
             content_text: contentText,
@@ -626,6 +682,7 @@ export function MessageThread({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             conversation_id: conversation.id,
+            whatsapp_config_id: selectedInstanceId || conversation.whatsapp_config_id || undefined,
             message_type: "interactive",
             interactive_payload: payload,
             reply_to_message_id: replyToId,
@@ -704,6 +761,7 @@ export function MessageThread({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             conversation_id: conversation.id,
+            whatsapp_config_id: selectedInstanceId || conversation.whatsapp_config_id || undefined,
             message_type: "template",
             template_name: template.name,
             template_language: template.language,
@@ -955,7 +1013,55 @@ export function MessageThread({
                   <span className="truncate">{displayName}</span>
                   <Info className="h-3.5 w-3.5 shrink-0 text-muted-foreground lg:hidden" />
                 </h2>
-                {conversation.whatsapp_instance?.name && (
+                {instances.length > 1 ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className="hidden sm:inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border border-border bg-muted/60 hover:bg-muted text-muted-foreground transition-colors cursor-pointer">
+                      <span
+                        className="h-1.5 w-1.5 rounded-full shrink-0"
+                        style={{
+                          backgroundColor:
+                            instances.find((i) => i.id === selectedInstanceId)?.color ||
+                            conversation.whatsapp_instance?.color ||
+                            "#25D366",
+                        }}
+                      />
+                      <span className="truncate max-w-[120px]">
+                        {instances.find((i) => i.id === selectedInstanceId)?.name ||
+                          conversation.whatsapp_instance?.name ||
+                          "Canal"}
+                      </span>
+                      <ChevronDown className="h-2.5 w-2.5 opacity-60 shrink-0" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="border-border bg-popover text-xs min-w-44">
+                      <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        Canal de Envio (WhatsApp)
+                      </div>
+                      {instances.map((inst) => (
+                        <DropdownMenuItem
+                          key={inst.id}
+                          onClick={() => handleInstanceSelect(inst.id)}
+                          className={cn(
+                            "flex items-center justify-between text-xs cursor-pointer py-1.5",
+                            selectedInstanceId === inst.id && "bg-accent font-medium text-accent-foreground"
+                          )}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span
+                              className="h-2 w-2 rounded-full shrink-0"
+                              style={{ backgroundColor: inst.color || "#25D366" }}
+                            />
+                            <span className="truncate">{inst.name}</span>
+                          </div>
+                          {inst.phone_number_id && (
+                            <span className="text-[10px] text-muted-foreground ml-2">
+                              {inst.phone_number_id.slice(-4)}
+                            </span>
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : conversation.whatsapp_instance?.name ? (
                   <span
                     className="hidden sm:inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border border-border bg-muted/60 text-muted-foreground"
                   >
@@ -970,7 +1076,7 @@ export function MessageThread({
                       {conversation.whatsapp_instance.name}
                     </span>
                   </span>
-                )}
+                ) : null}
               </div>
               <p className="truncate text-xs text-muted-foreground">{contact.phone}</p>
             </div>

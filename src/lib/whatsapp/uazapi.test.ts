@@ -226,7 +226,7 @@ describe('Uazapi WhatsApp Provider Client', () => {
       expect(val.messages?.[0].text?.body).toBe('Quero fazer um pedido');
     });
 
-    it('ignores group messages and fromMe echoes', () => {
+    it('ignores group messages but normalizes fromMe outbound messages for 2-way sync', () => {
       expect(
         parseUazapiWebhookToMetaEntries(
           {
@@ -241,19 +241,21 @@ describe('Uazapi WhatsApp Provider Client', () => {
         )
       ).toEqual([]);
 
-      expect(
-        parseUazapiWebhookToMetaEntries(
-          {
-            EventType: 'messages',
-            message: {
-              chatid: '5511977776666@s.whatsapp.net',
-              fromMe: true,
-              text: 'Enviada por mim',
-            },
+      const fromMeEntries = parseUazapiWebhookToMetaEntries(
+        {
+          EventType: 'messages',
+          message: {
+            chatid: '5511977776666@s.whatsapp.net',
+            fromMe: true,
+            text: 'Enviada por mim',
           },
-          '5511999998888'
-        )
-      ).toEqual([]);
+        },
+        '5511999998888'
+      );
+      expect(fromMeEntries).toHaveLength(1);
+      expect(fromMeEntries[0].changes[0].value.messages?.[0].from_me).toBe(true);
+      expect(fromMeEntries[0].changes[0].value.messages?.[0].from).toBe('5511977776666');
+      expect(fromMeEntries[0].changes[0].value.messages?.[0].text?.body).toBe('Enviada por mim');
     });
 
     it('normalizes Uazapi button/list interactive replies', () => {

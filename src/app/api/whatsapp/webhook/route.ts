@@ -65,6 +65,8 @@ interface WhatsAppMessage {
   }
   /** Present when the customer swipe-replies to one of our messages. */
   context?: { id: string }
+  /** Present when sent from mobile device / WhatsApp client (two-way sync) */
+  from_me?: boolean
 }
 
 interface WhatsAppWebhookEntry {
@@ -212,17 +214,29 @@ export async function POST(request: Request) {
 
     if (isUazapiWebhookPayload(parsedRaw)) {
       const uazToken = extractUazapiWebhookToken(request, parsedRaw)
-      if (!uazToken) {
+      const payloadObj = parsedRaw as Record<string, unknown>
+      const url = new URL(request.url)
+      const instanceHint = String(
+        url.searchParams.get('instance') ||
+          payloadObj.instance ||
+          payloadObj.instance_name ||
+          (payloadObj.data && typeof payloadObj.data === 'object'
+            ? (payloadObj.data as Record<string, unknown>).instance
+            : '') ||
+          ''
+      ).trim()
+
+      if (!uazToken && !instanceHint) {
         recordTelemetryEvent({
           category: 'webhook_error',
           metric_name: 'whatsapp.webhook.uazapi_token_missing',
           severity: 'warning',
           value: 1,
         })
-        return NextResponse.json({ error: 'Missing Uazapi webhook token' }, { status: 401 })
+        return NextResponse.json({ error: 'Missing Uazapi webhook token or instance identifier' }, { status: 401 })
       }
 
-      // Match token against whatsapp_config rows with provider = 'uazapi'
+      // Match token or instance against whatsapp_config rows with provider = 'uazapi'
       const { data: uazConfigs } = await supabaseAdmin()
         .from('whatsapp_config')
         .select('id, account_id, user_id, phone_number_id, instance_name, access_token, verify_token')
@@ -230,18 +244,23 @@ export async function POST(request: Request) {
 
       let matchedPhoneNumberId: string | null = null
       for (const cfg of uazConfigs || []) {
-        let tokenMatch = false
-        if (cfg.verify_token) {
-          try {
-            if (decrypt(cfg.verify_token) === uazToken) tokenMatch = true
-          } catch {}
+        let match = false
+        if (uazToken) {
+          if (cfg.verify_token) {
+            try {
+              if (decrypt(cfg.verify_token) === uazToken) match = true
+            } catch {}
+          }
+          if (!match && cfg.access_token) {
+            try {
+              if (decrypt(cfg.access_token) === uazToken) match = true
+            } catch {}
+          }
         }
-        if (!tokenMatch && cfg.access_token) {
-          try {
-            if (decrypt(cfg.access_token) === uazToken) tokenMatch = true
-          } catch {}
+        if (!match && instanceHint && cfg.instance_name === instanceHint) {
+          match = true
         }
-        if (tokenMatch) {
+        if (match) {
           matchedPhoneNumberId = cfg.phone_number_id
           break
         }
@@ -257,15 +276,20 @@ export async function POST(request: Request) {
         const globalVal = (globalRow?.value as Record<string, unknown>) || {}
         if (globalVal.provider === 'uazapi' && globalVal.phone_number_id) {
           let globalMatch = false
-          if (globalVal.encrypted_verify_token) {
-            try {
-              if (decrypt(globalVal.encrypted_verify_token as string) === uazToken) globalMatch = true
-            } catch {}
+          if (uazToken) {
+            if (globalVal.encrypted_verify_token) {
+              try {
+                if (decrypt(globalVal.encrypted_verify_token as string) === uazToken) globalMatch = true
+              } catch {}
+            }
+            if (!globalMatch && globalVal.encrypted_access_token) {
+              try {
+                if (decrypt(globalVal.encrypted_access_token as string) === uazToken) globalMatch = true
+              } catch {}
+            }
           }
-          if (!globalMatch && globalVal.encrypted_access_token) {
-            try {
-              if (decrypt(globalVal.encrypted_access_token as string) === uazToken) globalMatch = true
-            } catch {}
+          if (!globalMatch && instanceHint && globalVal.instance_name === instanceHint) {
+            globalMatch = true
           }
           if (globalMatch) {
             matchedPhoneNumberId = globalVal.phone_number_id as string
@@ -280,7 +304,7 @@ export async function POST(request: Request) {
           severity: 'critical',
           value: 1,
         })
-        return NextResponse.json({ error: 'Invalid Uazapi webhook token' }, { status: 401 })
+        return NextResponse.json({ error: 'Invalid Uazapi webhook token or instance' }, { status: 401 })
       }
 
       recordTelemetryEvent({
@@ -852,14 +876,16 @@ async function processMessage(
     }
   }
 
+  const isFromMe = Boolean(message.from_me)
+
   const { error: msgError } = await supabaseAdmin().from('messages').insert({
     conversation_id: conversation.id,
-    sender_type: 'customer',
+    sender_type: isFromMe ? 'agent' : 'customer',
     content_type: contentType,
     content_text: contentText,
     media_url: mediaUrl,
     message_id: message.id,
-    status: 'delivered',
+    status: isFromMe ? 'delivered' : 'delivered',
     created_at: new Date(parseInt(message.timestamp) * 1000).toISOString(),
     reply_to_message_id: replyToInternalId,
     // Only populated for content_type='interactive'. Migration 010 added
@@ -876,6 +902,46 @@ async function processMessage(
       return
     }
     console.error('Error inserting message:', msgError)
+    return
+  }
+
+  // If this message was sent directly from the phone / WhatsApp Web (fromMe):
+  // 1. Update the conversation preview & timestamps without bumping unread_count
+  // 2. Pause active flow runs (human agent took over)
+  // 3. Dispatch message.sent event and return early (skip customer bot/auto-reply)
+  if (isFromMe) {
+    await supabaseAdmin()
+      .from('conversations')
+      .update({
+        last_message_text: contentText || `[${contentType}]`,
+        last_message_at: new Date(parseInt(message.timestamp) * 1000).toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conversation.id)
+
+    try {
+      await supabaseAdmin()
+        .from('flow_runs')
+        .update({
+          status: 'paused_by_agent',
+          ended_at: new Date().toISOString(),
+          end_reason: 'agent_replied',
+        })
+        .eq('account_id', accountId)
+        .eq('contact_id', contactRecord.id)
+        .eq('status', 'active')
+    } catch (err) {
+      console.warn('[webhook] pause flows on mobile send failed:', err)
+    }
+
+    await dispatchWebhookEvent(supabaseAdmin(), accountId, 'message.sent', {
+      conversation_id: conversation.id,
+      contact_id: contactRecord.id,
+      message_id: message.id,
+      content_type: contentType,
+      content_text: contentText,
+      source: 'whatsapp_device',
+    })
     return
   }
 

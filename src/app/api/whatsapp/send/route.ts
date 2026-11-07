@@ -151,7 +151,7 @@ export async function POST(request: Request) {
 
       // If a specific WhatsApp instance was requested and differs, update it
       if (whatsapp_config_id && data.whatsapp_config_id !== whatsapp_config_id) {
-        void supabase
+        await supabase
           .from('conversations')
           .update({ whatsapp_config_id })
           .eq('id', data.id)
@@ -203,6 +203,7 @@ export async function POST(request: Request) {
     try {
       const result = await sendMessageToConversation(supabase, accountId, {
         conversationId,
+        whatsappConfigId: whatsapp_config_id || undefined,
         messageType: message_type,
         contentText: content_text,
         mediaUrl: media_url,

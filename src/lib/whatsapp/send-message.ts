@@ -79,6 +79,7 @@ export class SendMessageError extends Error {
 
 export interface SendMessageParams {
   conversationId: string;
+  whatsappConfigId?: string | null;
   messageType: string;
   contentText?: string | null;
   mediaUrl?: string | null;
@@ -195,6 +196,7 @@ export async function sendMessageToConversation(
 ): Promise<SendMessageResult> {
   const {
     conversationId,
+    whatsappConfigId,
     messageType,
     contentText,
     mediaUrl,
@@ -257,11 +259,12 @@ export async function sendMessageToConversation(
 
   // WhatsApp config, account-scoped with multi-instance support and global platform fallback
   let config: any = null;
-  if (conversation.whatsapp_config_id) {
+  const targetConfigId = whatsappConfigId || conversation.whatsapp_config_id;
+  if (targetConfigId) {
     const { data: specificConfig } = await db
       .from('whatsapp_config')
       .select('*')
-      .eq('id', conversation.whatsapp_config_id)
+      .eq('id', targetConfigId)
       .eq('account_id', accountId)
       .maybeSingle();
     config = specificConfig;

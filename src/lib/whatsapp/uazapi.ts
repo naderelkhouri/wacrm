@@ -821,6 +821,7 @@ export interface NormalizedWebhookEntry {
           list_reply?: { id: string; title: string; description?: string };
         };
         context?: { id: string };
+        from_me?: boolean;
       }>;
       statuses?: Array<{
         id: string;
@@ -1091,18 +1092,23 @@ export function parseUazapiWebhookToMetaEntries(
       msgObj.wasSentByApi === true ||
       keyObj.fromMe === true
   );
-  if (fromMe) {
-    return [];
-  }
 
   const rawChatId = String(
-    msgObj.chatid ||
-      msgObj.sender ||
-      msgObj.sender_pn ||
-      keyObj.remoteJid ||
-      (payload.chat && typeof payload.chat === 'object'
-        ? (payload.chat as Record<string, unknown>).wa_chatid
-        : '') ||
+    (fromMe
+      ? msgObj.chatid ||
+        keyObj.remoteJid ||
+        (payload.chat && typeof payload.chat === 'object'
+          ? (payload.chat as Record<string, unknown>).wa_chatid
+          : '') ||
+        msgObj.recipient ||
+        msgObj.to
+      : msgObj.chatid ||
+        msgObj.sender ||
+        msgObj.sender_pn ||
+        keyObj.remoteJid ||
+        (payload.chat && typeof payload.chat === 'object'
+          ? (payload.chat as Record<string, unknown>).wa_chatid
+          : '')) ||
       ''
   );
 
@@ -1228,6 +1234,7 @@ export function parseUazapiWebhookToMetaEntries(
     from: senderPhone,
     timestamp,
     type: 'text',
+    from_me: fromMe,
     ...(quotedId ? { context: { id: quotedId } } : {}),
   };
 
