@@ -8,6 +8,7 @@
 import { NextResponse } from 'next/server';
 import { getCurrentAccount, toErrorResponse, ForbiddenError } from '@/lib/auth/account';
 import { pagseguroClient, PagSeguroApiError } from '@/lib/payments/pagseguro/client';
+import { createStripeCheckoutSession } from '@/lib/payments/stripe/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,8 @@ export async function POST(request: Request) {
 
     const body = (await request.json().catch(() => null)) as {
       planId?: string;
+      gateway?: 'pagseguro' | 'stripe';
+      currency?: 'BRL' | 'USD' | 'EUR';
       customerTaxId?: string;
       customerPhone?: string;
       customerName?: string;
@@ -52,6 +55,26 @@ export async function POST(request: Request) {
 
     const customerName = body.customerName || userProfile?.full_name || ctx.account.name || 'Cliente WACRM';
     let customerEmail = userProfile?.email || 'contato@wcloudapi.dev';
+
+    // Route to Stripe for International Customers (USD/EUR or explicitly requested)
+    if (body.gateway === 'stripe' || body.currency === 'USD' || body.currency === 'EUR') {
+      const origin = new URL(request.url).origin;
+      const stripeSession = await createStripeCheckoutSession({
+        accountId,
+        userId,
+        planId: body.planId,
+        currency: (body.currency?.toLowerCase() as 'usd' | 'eur') || 'usd',
+        customerEmail,
+        customerName,
+        origin,
+      });
+
+      return NextResponse.json({
+        gateway: 'stripe',
+        url: stripeSession.url,
+        sessionId: stripeSession.sessionId,
+      });
+    }
 
     // PagBank sandbox rejects orders where buyer email is identical to the merchant account email
     const merchantEmail = process.env.PAGSEGURO_MERCHANT_EMAIL || 'progredindosempre@gmail.com';

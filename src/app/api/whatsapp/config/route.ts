@@ -12,6 +12,7 @@ import {
   normalizeUazapiBaseUrl,
   getPublicAppOrigin,
 } from '@/lib/whatsapp/uazapi'
+import { detectGeoFromPhone } from '@/lib/whatsapp/geo-utils'
 import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
 import { ensureAccountForUser } from '@/lib/auth/ensure-account'
 
@@ -294,6 +295,11 @@ export async function POST(request: Request) {
       api_url,
       instance_name,
       phone_number_id: rawPhoneNumberId,
+      country: rawCountry,
+      state: rawState,
+      city: rawCity,
+      warmup_enabled: rawWarmupEnabled,
+      daily_message_limit: rawDailyLimit,
       waba_id,
       access_token,
       verify_token,
@@ -423,6 +429,11 @@ export async function POST(request: Request) {
         resolvedNodeId = matchedNode.id
       }
 
+      const detectedGeo = detectGeoFromPhone(resolvedPhoneNumberId || '')
+      const finalCountry = (typeof rawCountry === 'string' && rawCountry.trim()) || detectedGeo.country || 'BR'
+      const finalState = (typeof rawState === 'string' && rawState.trim()) || detectedGeo.state || null
+      const finalCity = (typeof rawCity === 'string' && rawCity.trim()) || detectedGeo.city || null
+
       const uazRow = {
         name: (instanceNameInput && String(instanceNameInput).trim()) || (instance_name ? String(instance_name).trim() : (phoneInfo.instance_name || 'WhatsApp Uazapi')),
         is_default: willBeDefault,
@@ -430,6 +441,11 @@ export async function POST(request: Request) {
         provider: 'uazapi' as const,
         api_url: normalizedApiUrl,
         node_id: resolvedNodeId,
+        country: finalCountry,
+        state: finalState,
+        city: finalCity,
+        warmup_enabled: rawWarmupEnabled !== undefined ? Boolean(rawWarmupEnabled) : true,
+        daily_message_limit: typeof rawDailyLimit === 'number' ? Math.max(10, rawDailyLimit) : 30,
         instance_name: instance_name ? String(instance_name).trim() : (phoneInfo.instance_name || null),
         phone_number_id: resolvedPhoneNumberId,
         waba_id: waba_id ? String(waba_id).trim() : 'uazapi',

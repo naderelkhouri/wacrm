@@ -38,6 +38,11 @@ export interface WhatsAppInstanceOption {
   provider: 'meta' | 'uazapi';
   status: string;
   is_default: boolean;
+  country?: string;
+  state?: string | null;
+  city?: string | null;
+  warmup_enabled?: boolean;
+  daily_message_limit?: number;
 }
 
 interface Step4Props {
@@ -83,7 +88,7 @@ export function Step4ScheduleSend({
         const supabase = createClient();
         const { data } = await supabase
           .from('whatsapp_config')
-          .select('id, name, phone_number_id, provider, status, is_default')
+          .select('id, name, phone_number_id, provider, status, is_default, country, state, city, warmup_enabled, daily_message_limit')
           .order('is_default', { ascending: false })
           .order('created_at', { ascending: true });
 
@@ -222,6 +227,42 @@ export function Step4ScheduleSend({
               ))}
             </SelectContent>
           </Select>
+
+          {/* Active instance details: Geo location & Warmup Guard */}
+          {(() => {
+            const activeInst = instances.find((i) => i.id === (selectedConfigId || instances[0]?.id));
+            if (!activeInst) return null;
+            const isExceeded = Boolean(
+              activeInst.warmup_enabled &&
+              activeInst.daily_message_limit &&
+              estimatedReach > activeInst.daily_message_limit
+            );
+
+            return (
+              <div className="space-y-2 pt-1 border-t border-border">
+                <div className="flex flex-wrap items-center justify-between text-xs gap-2">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    📍 {activeInst.city ? `${activeInst.city} - ${activeInst.state}` : (activeInst.country || 'Brasil')}
+                  </span>
+                  {activeInst.warmup_enabled && (
+                    <span className="text-amber-500 font-medium flex items-center gap-1">
+                      🔥 Modo Aquecimento (Máx. {activeInst.daily_message_limit} msgs/dia)
+                    </span>
+                  )}
+                </div>
+
+                {isExceeded && (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-500 flex items-start gap-2">
+                    <span>⚠️</span>
+                    <span>
+                      <strong>Alerta de Aquecimento:</strong> A audiência ({estimatedReach.toLocaleString()} contatos) ultrapassa o limite seguro de aquecimento deste chip ({activeInst.daily_message_limit} mensagens/dia). Recomendamos segmentar o público para prevenir bloqueios preventivos pela Meta.
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           <p className="text-xs text-muted-foreground">
             Você pode disparar utilizando tanto a API Não Oficial (Uazapi) quanto a API Oficial da Meta.
           </p>

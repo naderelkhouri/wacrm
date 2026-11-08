@@ -23,6 +23,9 @@ import {
   Check,
   Star,
   Settings2,
+  MapPin,
+  Flame,
+  Globe,
 } from 'lucide-react';
 import type { MetaWhatsAppHealth } from '@/lib/whatsapp/meta-api';
 import { createClient } from '@/lib/supabase/client';
@@ -34,6 +37,13 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { SettingsPanelHead } from './settings-panel-head';
 import {
   Accordion,
@@ -43,6 +53,12 @@ import {
 } from '@/components/ui/accordion';
 import type { WhatsAppConfig as WhatsAppConfigType } from '@/types';
 import { cn } from '@/lib/utils';
+import {
+  detectGeoFromPhone,
+  SUPPORTED_COUNTRIES,
+  BRAZIL_STATES,
+} from '@/lib/whatsapp/geo-utils';
+import { calculateWarmupStage } from '@/lib/whatsapp/warmup';
 
 const MASKED_TOKEN = '••••••••••••••••';
 
@@ -87,6 +103,13 @@ export function WhatsAppConfig() {
   const [verifyToken, setVerifyToken] = useState('');
   const [pin, setPin] = useState('');
   const [tokenEdited, setTokenEdited] = useState(false);
+
+  // Geo-location & Warm-up fields
+  const [country, setCountry] = useState('BR');
+  const [state, setState] = useState('SP');
+  const [city, setCity] = useState('São Paulo');
+  const [warmupEnabled, setWarmupEnabled] = useState(true);
+  const [dailyLimit, setDailyLimit] = useState(30);
 
   // Connection & registration
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('unknown');
@@ -182,6 +205,11 @@ export function WhatsAppConfig() {
     setPin('');
     setTokenEdited(false);
     setRegistrationProbe(null);
+    setCountry(c.country || 'BR');
+    setState(c.state || 'SP');
+    setCity(c.city || 'São Paulo');
+    setWarmupEnabled(c.warmup_enabled !== undefined ? Boolean(c.warmup_enabled) : true);
+    setDailyLimit(c.daily_message_limit || 30);
   };
 
   const fetchConfig = useCallback(async (acctId: string, targetId?: string) => {
@@ -253,6 +281,11 @@ export function WhatsAppConfig() {
         setPin('');
         setTokenEdited(false);
         setRegistrationProbe(null);
+        setCountry('BR');
+        setState('SP');
+        setCity('São Paulo');
+        setWarmupEnabled(true);
+        setDailyLimit(30);
 
         // Check if global connection is used
         try {
@@ -412,6 +445,11 @@ export function WhatsAppConfig() {
         api_url: provider === 'uazapi' ? apiUrl.trim() : null,
         instance_name: provider === 'uazapi' ? instanceName.trim() || null : null,
         phone_number_id: phoneNumberId.trim() || null,
+        country: country || 'BR',
+        state: state || null,
+        city: city.trim() || null,
+        warmup_enabled: warmupEnabled,
+        daily_message_limit: dailyLimit,
         waba_id: wabaId.trim() || null,
         verify_token: verifyToken.trim() || null,
         pin: pin.trim() || null,
@@ -1008,14 +1046,146 @@ export function WhatsAppConfig() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label className="text-muted-foreground">Número WhatsApp / ID (Opcional)</Label>
+                      <Label className="text-muted-foreground flex items-center justify-between">
+                        <span>Número WhatsApp / ID (Opcional)</span>
+                        <span className="text-[11px] text-emerald-500 font-medium flex items-center gap-1">
+                          <MapPin className="size-3" /> Auto-detecta DDD
+                        </span>
+                      </Label>
                       <Input
                         placeholder="Ex: 5511999998888 (detectado automaticamente)"
                         value={phoneNumberId}
-                        onChange={(e) => setPhoneNumberId(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPhoneNumberId(val);
+                          if (val.length >= 4) {
+                            const geo = detectGeoFromPhone(val);
+                            if (geo.country) setCountry(geo.country);
+                            if (geo.state) setState(geo.state);
+                            if (geo.city) setCity(geo.city);
+                          }
+                        }}
                         className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
                       />
                     </div>
+                  </div>
+
+                  {/* Localização Regional & Blindagem Geográfica */}
+                  <div className="rounded-xl border border-border bg-card/60 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                        <Globe className="size-4 text-emerald-500" />
+                        Região da Conta (Blindagem Anti-Ban da Meta)
+                      </Label>
+                      <span className="text-[11px] text-muted-foreground">
+                        {country === 'BR' ? '🇧🇷 Brasil (DDD Local)' : '🌐 Internacional'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">País (DDI)</Label>
+                        <Select value={country} onValueChange={(val) => val && setCountry(val)}>
+                          <SelectTrigger className="bg-muted border-border text-foreground">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-popover border-border">
+                            {SUPPORTED_COUNTRIES.map((c) => (
+                              <SelectItem key={c.code} value={c.code}>
+                                <span className="flex items-center gap-1.5">
+                                  <span>{c.flag}</span>
+                                  <span>{c.name}</span>
+                                  <span className="text-xs text-muted-foreground">(+{c.ddi})</span>
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Estado (UF / Província)</Label>
+                        {country === 'BR' ? (
+                          <Select value={state || 'SP'} onValueChange={(val) => val && setState(val)}>
+                            <SelectTrigger className="bg-muted border-border text-foreground">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-popover border-border">
+                              {BRAZIL_STATES.map((uf) => (
+                                <SelectItem key={uf} value={uf}>
+                                  {uf}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input
+                            placeholder="Ex: Florida / Lisboa"
+                            value={state || ''}
+                            onChange={(e) => setState(e.target.value)}
+                            className="bg-muted border-border text-foreground"
+                          />
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Cidade</Label>
+                        <Input
+                          placeholder="Ex: São Paulo"
+                          value={city}
+                          onChange={(e) => setCity(e.target.value)}
+                          className="bg-muted border-border text-foreground"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      A Meta monitora distâncias geográficas de conexão. Vincular a cidade/estado garante que o Uazapi use rotas adequadas ao DDD da conta.
+                    </p>
+                  </div>
+
+                  {/* Motor de Aquecimento (Warm-up Engine) */}
+                  <div className="rounded-xl border border-border bg-card/60 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                          <Flame className="size-4 text-amber-500" />
+                          Modo Aquecimento (Anti-Ban Guard)
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Controla a cadência e o volume diário para proteger chips novos contra bloqueios preventivos.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={warmupEnabled}
+                        onCheckedChange={setWarmupEnabled}
+                      />
+                    </div>
+
+                    {warmupEnabled && (
+                      <div className="pt-2 border-t border-border space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground font-medium">
+                            {calculateWarmupStage(config?.warmup_started_at).stageName}
+                          </span>
+                          <span className="font-semibold text-foreground">
+                            Limite Diário: {dailyLimit} msgs/dia
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 items-center">
+                          <Input
+                            type="number"
+                            min="10"
+                            max="5000"
+                            value={dailyLimit}
+                            onChange={(e) => setDailyLimit(parseInt(e.target.value, 10) || 30)}
+                            className="bg-muted border-border text-foreground text-xs"
+                          />
+                          <p className="text-[11px] text-muted-foreground">
+                            {calculateWarmupStage(config?.warmup_started_at).recommendations[0]}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               ) : (

@@ -296,6 +296,17 @@ export async function POST(request: Request) {
       }
     }
 
+    if (sentCount > 0 && config.id && config.id !== 'global') {
+      try {
+        await supabase.rpc('increment_whatsapp_daily_sent', {
+          config_id: config.id,
+          count_to_add: sentCount,
+        })
+      } catch (err) {
+        console.error('Failed to increment daily warmup sent:', err)
+      }
+    }
+
     return NextResponse.json({
       success: true,
       total: recipients.length,

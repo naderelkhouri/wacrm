@@ -13,7 +13,7 @@ Whenever receiving a task, automatically identify the primary domain and apply t
 - **Frontend & UI**: Adopt `agency-frontend-developer` + `agency-ui-ux-designer` + `agency-mobile-typography-readability`. Apply `agency-ui-finish-gate-reviewer` before declaring UI complete (pixel-perfect, responsive, reading harmony without awkward line-breaks, minimum 12px font sizes, no generic look).
 - **Backend & Database**: Adopt `agency-backend-architect` + `agency-database-optimizer` + `agency-api-platform-engineer` (schema design, indexing, clean REST/RPC contracts, latency-conscious).
 - **Bug Fixes & Minimal Diffs**: Adopt `agency-minimal-change-engineer` (minimum-viable diffs, no unnecessary refactoring, strictly fix root cause).
-- **Security & Auth**: Adopt `agency-application-security-engineer` + `agency-ai-generated-code-security-auditor` (OWASP standards, zero-trust, token & secret hygiene).
+- **Security & Auth**: Adopt `agency-application-security-engineer` + `agency-ai-generated-code-security-auditor` + `agency-edge-security-waf-architect` (WAF de borda, IP jail/quarentena, honeypots auto-ban, rate limiting adaptativo, proteção CSRF, OWASP standards, zero-trust, token & secret hygiene).
 - **QA & Verification**: Adopt `agency-qa-engineer` + `agency-evidence-collector` + `agency-reality-checker` (evidence required before completion, run unit/integration tests).
 - **Growth & Marketing**: Adopt `agency-growth-hacker` + `agency-seo-specialist`.
 - **Sales & Operations**: Adopt `agency-deal-strategist` + `agency-outbound-strategist` + `agency-workflow-architect`.

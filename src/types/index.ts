@@ -285,6 +285,13 @@ export interface WhatsAppConfig {
   is_default?: boolean;
   color?: string | null;
   node_id?: string | null;
+  country?: string;
+  state?: string | null;
+  city?: string | null;
+  warmup_enabled?: boolean;
+  warmup_started_at?: string | null;
+  daily_message_limit?: number;
+  messages_sent_today?: number;
   provider?: WhatsAppProvider;
   api_url?: string | null;
   instance_name?: string | null;
