@@ -31,7 +31,7 @@ echo "=== [5/5] Construindo imagem Docker e atualizando Swarm ==="
 ssh -i "$SSH_KEY" "$SERVER" "cd $REMOTE_DIR && \
   tar -xzf bundle.tar.gz && \
   docker build -f Dockerfile.standalone -t wacrm:latest . && \
-  set -a && ([ -f .env ] && . ./.env || ([ -f .env.local ] && . ./.env.local)) && set +a && \
+  export \$(grep -v '^#' .env | xargs -d '\n') && \
   docker stack deploy -c docker-compose.prod.yml wacrm && \
   docker service update --image wacrm:latest --force wacrm_app"
 
