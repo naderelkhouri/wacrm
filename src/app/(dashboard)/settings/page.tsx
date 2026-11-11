@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useMemo, type ReactNode } from 'react';
+import { Suspense, useMemo, useState, useEffect, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 
@@ -46,6 +46,27 @@ function SettingsPageInner() {
   const { defaultCurrency } = useAuth();
   const { mode } = useTheme();
   const t = useTranslations('Settings');
+
+  const [railCollapsed, setRailCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('wacrm_settings_rail_collapsed');
+      if (stored === 'true') {
+        setRailCollapsed(true);
+      }
+    }
+  }, []);
+
+  const toggleRailCollapse = () => {
+    setRailCollapsed((prev) => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('wacrm_settings_rail_collapsed', String(next));
+      }
+      return next;
+    });
+  };
 
   // The URL (`?tab=`) is the single source of truth for the active
   // section — deep-linkable, and it keeps the existing links in the
@@ -96,8 +117,20 @@ function SettingsPageInner() {
         </p>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[236px_minmax(0,1fr)] lg:items-start">
-        <SettingsRail active={section} onSelect={go} hints={hints} />
+      <div
+        className={`mt-6 grid gap-6 transition-[grid-template-columns] duration-200 lg:items-start ${
+          railCollapsed
+            ? 'lg:grid-cols-[52px_minmax(0,1fr)]'
+            : 'lg:grid-cols-[236px_minmax(0,1fr)]'
+        }`}
+      >
+        <SettingsRail
+          active={section}
+          onSelect={go}
+          hints={hints}
+          collapsed={railCollapsed}
+          onToggleCollapse={toggleRailCollapse}
+        />
         <div className="min-w-0">{panel[section]}</div>
       </div>
     </div>

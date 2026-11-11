@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useTotalUnread } from "@/hooks/use-total-unread";
@@ -15,6 +15,8 @@ import {
   LayoutDashboard,
   LogOut,
   MessageSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
   Radio,
   Settings,
   Shield,
@@ -28,6 +30,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { AccountRole } from "@/lib/auth/roles";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 
 // Per-role chip metadata used in the sidebar's account strip + the
 // Members tab roster. Keeping this near both consumers in a single
@@ -120,6 +123,33 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
   const { profile, profileLoading, account, accountRole, isSuperAdmin, signOut } = useAuth();
   const totalUnread = useTotalUnread();
   const unreadNotifications = useUnreadNotifications();
+
+  // Desktop collapsible state persisted in localStorage
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("wacrm_sidebar_collapsed");
+      if (stored !== null) {
+        setCollapsed(stored === "true");
+      }
+    } catch {
+      // Ignore localStorage read errors in private browsing
+    }
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("wacrm_sidebar_collapsed", String(next));
+      } catch {
+        // Ignore localStorage write errors
+      }
+      return next;
+    });
+  };
+
   // Only surface the account-name strip when it actually carries
   // information. A solo user's personal account is named after them
   // (the 017 signup trigger seeds it from `full_name`), so showing it
@@ -180,22 +210,65 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           "fixed inset-y-0 left-0 z-40 flex h-full w-64 flex-col border-r border-border bg-card",
           "transition-transform duration-200 ease-out will-change-transform",
           open ? "translate-x-0" : "-translate-x-full",
-          // Desktop: static, always visible — reset all the mobile framing.
-          "lg:static lg:z-0 lg:w-60 lg:translate-x-0 lg:transition-none",
+          // Desktop: collapsible width with smooth transition
+          "lg:static lg:z-0 lg:translate-x-0 lg:transition-[width] lg:duration-200 lg:ease-in-out",
+          collapsed ? "lg:w-[68px]" : "lg:w-60"
         )}
         aria-label="Primary"
       >
-        {/* Logo row. On mobile we put a close button here; on desktop the
-            close button is hidden since the sidebar is always-visible. */}
-        <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <MessageSquare className="h-4 w-4" />
-            </div>
-            <span className="text-sm font-semibold text-foreground">
-              {t("title")}
-            </span>
-          </Link>
+        {/* Header / Logo row */}
+        <div
+          className={cn(
+            "flex h-14 shrink-0 items-center border-b border-border transition-all duration-200",
+            collapsed ? "justify-center px-2" : "justify-between px-4 gap-2"
+          )}
+        >
+          {collapsed ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    onClick={toggleCollapsed}
+                    aria-label="Expandir menu"
+                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                  </button>
+                }
+              />
+              <TooltipContent side="right" sideOffset={12}>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">{t("title")}</span>
+                  <span className="text-[11px] text-muted-foreground">(Clique para expandir)</span>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <Link href="/dashboard" className="flex items-center gap-2 overflow-hidden">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <MessageSquare className="h-4 w-4" />
+              </div>
+              <span className="text-sm font-semibold text-foreground truncate">
+                {t("title")}
+              </span>
+            </Link>
+          )}
+
+          {/* Desktop Collapse Toggle Button (When expanded) */}
+          {!collapsed && (
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              aria-label="Recolher menu lateral"
+              title="Recolher menu lateral"
+              className="hidden lg:flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          )}
+
+          {/* Mobile close button */}
           <button
             type="button"
             onClick={onClose}
@@ -207,8 +280,8 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
         </div>
 
         {/* Main navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
-          <ul className="flex flex-col gap-1">
+        <nav className={cn("flex-1 overflow-y-auto py-4", collapsed ? "px-2" : "px-3")}>
+          <ul className="flex flex-col gap-1.5">
             {navItems.map((item) => {
               const isActive =
                 pathname === item.href ||
@@ -217,121 +290,183 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
               const showUnreadDot =
                 item.href === "/inbox" && totalUnread > 0 && !isActive;
 
-              // Unlike the inbox dot, the notifications count stays visible
-              // even while the page is active — it reflects unread state
-              // (cleared by marking notifications read), not "currently
-              // viewing this section".
               const showNotificationBadge =
                 item.href === "/notifications" && unreadNotifications > 0;
 
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      // Taller on mobile so fingers can hit the row reliably (≥44px).
-                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:py-2",
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span className="flex-1">{t(item.labelKey as string)}</span>
-                    {item.beta && (
-                      <span
-                        aria-label={t("beta")}
-                        className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-300"
-                      >
-                        {t("beta")}
-                      </span>
-                    )}
-                    {showUnreadDot && (
-                      <span
-                        aria-label={t("unreadConversations", { count: totalUnread })}
-                        className="relative flex h-2 w-2"
-                      >
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-                      </span>
-                    )}
-                    {showNotificationBadge && (
-                      <span
-                        aria-label={t("unreadNotifications", { count: unreadNotifications })}
-                        className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground"
-                      >
-                        {unreadNotifications > 9 ? "9+" : unreadNotifications}
-                      </span>
-                    )}
-                  </Link>
-                </li>
+              const navLink = (
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "flex items-center rounded-lg text-sm font-medium transition-colors relative",
+                    collapsed
+                      ? "justify-center h-10 w-10 mx-auto p-0"
+                      : "gap-3 px-3 py-2.5 lg:py-2",
+                    isActive
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  <item.icon className="h-4 w-4 shrink-0" />
+                  {!collapsed && <span className="flex-1 truncate">{t(item.labelKey as string)}</span>}
+
+                  {!collapsed && item.beta && (
+                    <span
+                      aria-label={t("beta")}
+                      className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-300"
+                    >
+                      {t("beta")}
+                    </span>
+                  )}
+
+                  {showUnreadDot && (
+                    <span
+                      aria-label={t("unreadConversations", { count: totalUnread })}
+                      className={cn(
+                        "flex h-2 w-2",
+                        collapsed ? "absolute top-2 right-2" : "relative ml-auto"
+                      )}
+                    >
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                    </span>
+                  )}
+
+                  {showNotificationBadge && (
+                    <span
+                      aria-label={t("unreadNotifications", { count: unreadNotifications })}
+                      className={cn(
+                        "flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground",
+                        collapsed ? "absolute -top-1 -right-1 ring-2 ring-card" : "ml-auto"
+                      )}
+                    >
+                      {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                    </span>
+                  )}
+                </Link>
               );
+
+              if (collapsed) {
+                return (
+                  <li key={item.href}>
+                    <Tooltip>
+                      <TooltipTrigger render={navLink} />
+                      <TooltipContent side="right" sideOffset={12}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium">{t(item.labelKey as string)}</span>
+                          {item.beta && (
+                            <span className="rounded bg-amber-500/20 px-1 text-[9px] text-amber-300">BETA</span>
+                          )}
+                          {showNotificationBadge && (
+                            <span className="rounded bg-primary px-1 text-[10px] text-primary-foreground">
+                              {unreadNotifications}
+                            </span>
+                          )}
+                          {showUnreadDot && (
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                          )}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </li>
+                );
+              }
+
+              return <li key={item.href}>{navLink}</li>;
             })}
           </ul>
 
           <div className="my-4 border-t border-border" />
 
-          <ul className="flex flex-col gap-1">
+          <ul className="flex flex-col gap-1.5">
             {bottomNavItems.map((item) => {
               const isActive = pathname.startsWith(item.href);
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:py-2",
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    {t(item.labelKey as string)}
-                  </Link>
-                </li>
-              );
-            })}
-            {isSuperAdmin && (
-              <li>
+
+              const settingsLink = (
                 <Link
-                  href="/admin"
+                  href={item.href}
                   className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors lg:py-2",
-                    pathname.startsWith("/admin")
-                      ? "bg-amber-500/15 text-amber-500 border border-amber-500/30"
-                      : "text-amber-500/90 hover:bg-amber-500/10 hover:text-amber-400",
+                    "flex items-center rounded-lg text-sm font-medium transition-colors",
+                    collapsed
+                      ? "justify-center h-10 w-10 mx-auto p-0"
+                      : "gap-3 px-3 py-2.5 lg:py-2",
+                    isActive
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                 >
-                  <ShieldAlert className="h-4 w-4 text-amber-500" />
-                  <span>Área Master</span>
+                  <item.icon className="h-4 w-4 shrink-0" />
+                  {!collapsed && <span className="truncate">{t(item.labelKey as string)}</span>}
                 </Link>
+              );
+
+              if (collapsed) {
+                return (
+                  <li key={item.href}>
+                    <Tooltip>
+                      <TooltipTrigger render={settingsLink} />
+                      <TooltipContent side="right" sideOffset={12}>
+                        <span className="font-medium">{t(item.labelKey as string)}</span>
+                      </TooltipContent>
+                    </Tooltip>
+                  </li>
+                );
+              }
+
+              return <li key={item.href}>{settingsLink}</li>;
+            })}
+
+            {isSuperAdmin && (
+              <li>
+                {(() => {
+                  const isActive = pathname.startsWith("/admin");
+                  const adminLink = (
+                    <Link
+                      href="/admin"
+                      className={cn(
+                        "flex items-center rounded-lg text-sm font-semibold transition-colors",
+                        collapsed
+                          ? "justify-center h-10 w-10 mx-auto p-0 border border-amber-500/30"
+                          : "gap-3 px-3 py-2.5 lg:py-2 border border-amber-500/30",
+                        isActive
+                          ? "bg-amber-500/20 text-amber-400"
+                          : "text-amber-500/90 hover:bg-amber-500/10 hover:text-amber-400"
+                      )}
+                    >
+                      <ShieldAlert className="h-4 w-4 shrink-0 text-amber-500" />
+                      {!collapsed && <span>Área Master</span>}
+                    </Link>
+                  );
+
+                  if (collapsed) {
+                    return (
+                      <Tooltip>
+                        <TooltipTrigger render={adminLink} />
+                        <TooltipContent side="right" sideOffset={12}>
+                          <div className="flex items-center gap-1.5 text-amber-400 font-semibold">
+                            <ShieldAlert className="h-3.5 w-3.5" />
+                            <span>Área Master (SuperAdmin)</span>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  }
+
+                  return adminLink;
+                })()}
               </li>
             )}
           </ul>
         </nav>
 
-        {/* User section */}
-        <div className="shrink-0 border-t border-border p-3">
-          {/* Account name display — surfaced only when the account
-              name differs from the user's own name (see
-              `showAccountStrip`). For a default solo account the two
-              match, so we hide it to avoid duplicating the user name
-              below; for renamed or shared accounts it tells the user
-              which account they're acting in. */}
-          {showAccountStrip && account?.name ? (
+        {/* User section footer */}
+        <div className={cn("shrink-0 border-t border-border", collapsed ? "p-2" : "p-3")}>
+          {showAccountStrip && account?.name && !collapsed && (
             <div className="mb-2 flex items-center gap-2 px-3 text-xs text-muted-foreground">
               <UsersRound className="size-3.5 shrink-0" />
-              {/* `title=` exposes the full name on hover when it
-                  gets truncated (long account names + narrow
-                  sidebars). Cheap a11y win. */}
               <span className="truncate" title={account.name}>
                 {account.name}
               </span>
               {accountRole ? (
-                // Always render the chip — owners used to be
-                // invisible here, which made them indistinguishable
-                // from admins at a glance. Now everyone sees their
-                // role (with a colour cue) regardless of tier.
                 (() => {
                   const meta = ROLE_CHIP[accountRole];
                   const Icon = meta.icon;
@@ -346,35 +481,67 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                 })()
               ) : null}
             </div>
-          ) : null}
+          )}
+
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60 focus:bg-muted/60 focus:outline-none data-popup-open:bg-muted/60">
-              <Avatar className="size-8 shrink-0">
-                {profile?.avatar_url ? (
-                  <AvatarImage
-                    src={profile.avatar_url}
-                    alt={profile.full_name ?? t("defaultAvatar")}
-                  />
-                ) : null}
-                <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
-                  {profile?.full_name?.charAt(0)?.toUpperCase() ??
-                    profile?.email?.charAt(0)?.toUpperCase() ??
-                    "U"}
-                </AvatarFallback>
-              </Avatar>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {profile?.full_name ?? t("defaultUser")}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {profile?.email ?? ""}
-                </p>
-              </div>
-            </DropdownMenuTrigger>
+            {collapsed ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <DropdownMenuTrigger className="flex h-10 w-10 mx-auto items-center justify-center rounded-lg transition-colors hover:bg-muted/60 focus:bg-muted/60 focus:outline-none data-popup-open:bg-muted/60">
+                      <Avatar className="size-8 shrink-0">
+                        {profile?.avatar_url ? (
+                          <AvatarImage
+                            src={profile.avatar_url}
+                            alt={profile.full_name ?? t("defaultAvatar")}
+                          />
+                        ) : null}
+                        <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
+                          {profile?.full_name?.charAt(0)?.toUpperCase() ??
+                            profile?.email?.charAt(0)?.toUpperCase() ??
+                            "U"}
+                        </AvatarFallback>
+                      </Avatar>
+                    </DropdownMenuTrigger>
+                  }
+                />
+                <TooltipContent side="right" sideOffset={12}>
+                  <div>
+                    <p className="font-medium text-foreground">{profile?.full_name ?? t("defaultUser")}</p>
+                    <p className="text-[11px] text-muted-foreground">{account?.name || profile?.email || ""}</p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60 focus:bg-muted/60 focus:outline-none data-popup-open:bg-muted/60">
+                <Avatar className="size-8 shrink-0">
+                  {profile?.avatar_url ? (
+                    <AvatarImage
+                      src={profile.avatar_url}
+                      alt={profile.full_name ?? t("defaultAvatar")}
+                    />
+                  ) : null}
+                  <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
+                    {profile?.full_name?.charAt(0)?.toUpperCase() ??
+                      profile?.email?.charAt(0)?.toUpperCase() ??
+                      "U"}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {profile?.full_name ?? t("defaultUser")}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {profile?.email ?? ""}
+                  </p>
+                </div>
+              </DropdownMenuTrigger>
+            )}
+
             <DropdownMenuContent
-              align="end"
-              side="top"
-              sideOffset={6}
+              align={collapsed ? "center" : "end"}
+              side={collapsed ? "right" : "top"}
+              sideOffset={8}
               className="min-w-56 bg-popover text-popover-foreground ring-border"
             >
               <DropdownMenuItem
