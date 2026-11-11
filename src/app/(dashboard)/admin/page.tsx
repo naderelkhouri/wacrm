@@ -353,15 +353,13 @@ function AdminPageInner() {
     return true;
   });
 
-  // Rail hints
+  // Rail hints - compact, minimal badges to prevent overflow
   const hints: Partial<Record<AdminMasterSection, ReactNode>> = useMemo(
     () => ({
       tenants: tenants.length > 0 ? tenants.length : undefined,
-      transactions: transactions.length > 0 ? transactions.length : undefined,
       telemetry: "100%",
-      governance: platformSettings?.mode?.toUpperCase(),
     }),
-    [tenants.length, transactions.length, platformSettings?.mode]
+    [tenants.length]
   );
 
   if (authLoading) {

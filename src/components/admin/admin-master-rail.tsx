@@ -45,7 +45,7 @@ export function AdminMasterRail({
       className={cn(
         'flex gap-1 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
         'border-b border-border',
-        'lg:sticky lg:top-0 lg:flex-col lg:overflow-visible lg:border-b-0 lg:pb-0 transition-all duration-200',
+        'lg:sticky lg:top-0 lg:flex-col lg:overflow-hidden lg:border-b-0 lg:pb-0 transition-all duration-200',
       )}
     >
       {onToggleCollapse && (
@@ -113,7 +113,7 @@ export function AdminMasterRail({
                   onClick={() => onSelect(s)}
                   aria-current={isActive ? 'page' : undefined}
                   className={cn(
-                    'flex shrink-0 items-center rounded-lg py-2 text-left text-sm font-medium whitespace-nowrap transition-colors',
+                    'flex shrink-0 items-center rounded-lg py-2 text-left text-sm font-medium whitespace-nowrap transition-colors overflow-hidden max-w-full',
                     collapsed
                       ? 'lg:w-10 lg:h-10 lg:justify-center lg:px-0 px-3'
                       : 'lg:w-full lg:px-3 lg:gap-2.5 px-3 gap-2.5',
@@ -123,11 +123,11 @@ export function AdminMasterRail({
                   )}
                 >
                   <Icon className={cn('size-4 shrink-0', isActive ? 'text-amber-500' : '')} />
-                  {!collapsed && <span className="flex-1">{meta.defaultTitle}</span>}
+                  {!collapsed && <span className="flex-1 truncate">{meta.defaultTitle}</span>}
                   {!collapsed && hints?.[s] != null ? (
                     <span
                       className={cn(
-                        'hidden items-center gap-1.5 text-xs lg:inline-flex',
+                        'hidden shrink-0 items-center gap-1.5 text-xs lg:inline-flex',
                         isActive ? 'text-amber-500 font-semibold' : 'text-muted-foreground',
                       )}
                     >

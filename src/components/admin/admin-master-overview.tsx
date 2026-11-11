@@ -287,7 +287,7 @@ export function AdminMasterOverview({
       </div>
 
       {/* 2x3 Interactive Quick-Navigation Grid */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-2 2xl:grid-cols-3">
         {tiles.map(({ section, title, icon: Icon, iconTone, subtitle, badge }) => (
           <button
             key={section}
@@ -307,12 +307,12 @@ export function AdminMasterOverview({
               <Icon className="size-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="flex items-center justify-between gap-1">
-                <span className="block text-sm font-semibold text-foreground">
+              <span className="flex items-center justify-between gap-2 min-w-0">
+                <span className="truncate text-sm font-semibold text-foreground">
                   {title}
                 </span>
                 {badge && (
-                  <Badge variant="secondary" className="text-[10px] py-0 px-1.5 h-4 font-normal">
+                  <Badge variant="secondary" className="shrink-0 text-[10px] py-0 px-1.5 h-4 font-normal">
                     {badge}
                   </Badge>
                 )}
