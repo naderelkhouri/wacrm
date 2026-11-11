@@ -51,7 +51,7 @@ describe('Telemetry Cron Route (/api/admin/telemetry/cron)', () => {
                   api_url: 'https://admxtech-admin.uazapi.com',
                   instance_name: 'test-node',
                   phone_number_id: '5521982915059',
-                  access_token_encrypted: 'encrypted_tok_123',
+                  access_token: 'encrypted_tok_123',
                 },
               ],
               error: null,

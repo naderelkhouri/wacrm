@@ -124,13 +124,13 @@ async function handleTelemetryCron(request: Request) {
   try {
     const { data: configs } = await admin
       .from('whatsapp_config')
-      .select('id, account_id, provider, api_url, instance_name, phone_number_id, access_token, access_token_encrypted')
+      .select('id, account_id, provider, api_url, instance_name, phone_number_id, access_token')
       .limit(20);
 
     if (configs && configs.length > 0) {
       for (const cfg of configs) {
         results.whatsapp_instances_checked += 1;
-        const encrypted = (cfg.access_token_encrypted || cfg.access_token) as string | undefined;
+        const encrypted = cfg.access_token as string | undefined;
 
         if (!encrypted) continue;
 
