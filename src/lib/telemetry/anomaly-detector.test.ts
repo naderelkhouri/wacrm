@@ -103,4 +103,43 @@ describe('Telemetry Anomaly Detector', () => {
     expect(memAnomaly).toBeDefined();
     expect(memAnomaly?.current_value).toBe(90);
   });
+
+  it('detects disconnected WhatsApp instance', () => {
+    const events: TelemetryEvent[] = [
+      {
+        category: 'meta_api',
+        metric_name: 'whatsapp.instance.status',
+        severity: 'critical',
+        value: 0,
+        metadata: { instanceName: 'nader-01', phone: '+5521982915059', status: 'disconnected' },
+        created_at: new Date().toISOString(),
+      },
+    ];
+
+    const anomalies = detectAnomalies(events, createMockSnapshot());
+    const waAnomaly = anomalies.find((a) => a.rule_id === 'RULE_WHATSAPP_INSTANCE_OFFLINE');
+
+    expect(waAnomaly).toBeDefined();
+    expect(waAnomaly?.severity).toBe('critical');
+    expect(waAnomaly?.auto_remediation_available).toBe(true);
+  });
+
+  it('detects stalled broadcast queue', () => {
+    const events: TelemetryEvent[] = [
+      {
+        category: 'broadcast_queue',
+        metric_name: 'broadcast.stalled',
+        severity: 'warning',
+        value: 2,
+        metadata: { campaign_ids: ['camp-1', 'camp-2'] },
+        created_at: new Date().toISOString(),
+      },
+    ];
+
+    const anomalies = detectAnomalies(events, createMockSnapshot());
+    const bcastAnomaly = anomalies.find((a) => a.rule_id === 'RULE_BROADCAST_STALLED');
+
+    expect(bcastAnomaly).toBeDefined();
+    expect(bcastAnomaly?.title).toContain('Disparo em Massa');
+  });
 });

@@ -49,6 +49,24 @@ export function AdminTelemetryDashboard() {
   const [recentEvents, setRecentEvents] = useState<TelemetryEvent[]>([]);
   const [remediations, setRemediations] = useState<RemediationAction[]>([]);
   const [recommendations, setRecommendations] = useState<OptimizationRecommendation[]>([]);
+  const [runningCron, setRunningCron] = useState(false);
+
+  const handleRunDiagnosticCron = async () => {
+    try {
+      setRunningCron(true);
+      const res = await fetch("/api/admin/telemetry/cron", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Falha ao executar ciclo de telemetria");
+      }
+      toast.success(data.message || "Diagnóstico e auto-cura executados com sucesso!");
+      await fetchTelemetry(true);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro ao executar telemetria");
+    } finally {
+      setRunningCron(false);
+    }
+  };
 
   const fetchTelemetry = useCallback(async (isSilent = false) => {
     try {
@@ -191,6 +209,16 @@ export function AdminTelemetryDashboard() {
         </div>
 
         <div className="flex items-center gap-2 self-end sm:self-center">
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleRunDiagnosticCron}
+            disabled={runningCron}
+            className="text-xs h-8 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+          >
+            <Zap className={`h-3.5 w-3.5 mr-1.5 ${runningCron ? "animate-spin" : ""}`} />
+            {runningCron ? "Executando..." : "Ciclo de Auto-Cura"}
+          </Button>
           <Button
             variant="outline"
             size="sm"

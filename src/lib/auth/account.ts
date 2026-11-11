@@ -67,7 +67,23 @@ export class ForbiddenError extends Error {
  * never leak `err.message` for non-classified errors to keep
  * server internals out of the wire.
  */
+import { recordTelemetryEvent } from '@/lib/telemetry/telemetry-service';
+
 export function toErrorResponse(err: unknown): NextResponse {
+  try {
+    const isAuthErr = err instanceof UnauthorizedError || err instanceof ForbiddenError;
+    const status = isAuthErr ? err.status : 500;
+    recordTelemetryEvent({
+      category: 'api_latency',
+      metric_name: 'api.dashboard.error',
+      severity: status >= 500 ? 'critical' : 'warning',
+      value: status,
+      metadata: { error: err instanceof Error ? err.message : String(err) },
+    });
+  } catch {
+    // Non-fatal telemetry recording
+  }
+
   if (err instanceof UnauthorizedError || err instanceof ForbiddenError) {
     return NextResponse.json({ error: err.message }, { status: err.status });
   }

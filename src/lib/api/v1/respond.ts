@@ -16,6 +16,7 @@
 
 import { NextResponse } from 'next/server';
 import type { RateLimitResult } from '@/lib/rate-limit';
+import { recordTelemetryEvent } from '@/lib/telemetry/telemetry-service';
 
 export type ApiErrorCode =
   | 'unauthorized' // missing / malformed / unknown / revoked / expired key
@@ -83,6 +84,16 @@ export function rateLimited(result: RateLimitResult): ApiError {
 
 /** Success envelope: `{ data: <payload> }`. */
 export function ok<T>(data: T, status = 200): NextResponse {
+  try {
+    recordTelemetryEvent({
+      category: 'api_latency',
+      metric_name: 'api.v1.success',
+      severity: 'info',
+      value: status,
+    });
+  } catch {
+    // Non-fatal telemetry recording
+  }
   return NextResponse.json({ data }, { status });
 }
 
@@ -119,6 +130,20 @@ export function fail(
  * never leak internal error text onto the public wire.
  */
 export function toApiErrorResponse(err: unknown): NextResponse {
+  try {
+    const status = err instanceof ApiError ? err.status : 500;
+    const code = err instanceof ApiError ? err.code : 'internal';
+    recordTelemetryEvent({
+      category: 'api_latency',
+      metric_name: `api.v1.${code}`,
+      severity: status >= 500 ? 'critical' : 'warning',
+      value: status,
+      metadata: { error: err instanceof Error ? err.message : String(err) },
+    });
+  } catch {
+    // Non-fatal telemetry recording
+  }
+
   if (err instanceof ApiError) {
     return NextResponse.json(
       { error: { code: err.code, message: err.message } },

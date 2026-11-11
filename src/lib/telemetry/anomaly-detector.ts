@@ -150,6 +150,67 @@ export const ANOMALY_RULES: AnomalyDetectionRule[] = [
       return null;
     },
   },
+
+  // 6. WhatsApp Instance Offline or Disconnected
+  {
+    rule_id: 'RULE_WHATSAPP_INSTANCE_OFFLINE',
+    title: 'Instância WhatsApp Conectada Offline ou Desconectada',
+    severity: 'critical',
+    check: (events) => {
+      const offlineEvents = events.filter(
+        (e) =>
+          e.category === 'meta_api' &&
+          e.metric_name === 'whatsapp.instance.status' &&
+          (e.severity === 'critical' || e.value === 0)
+      );
+      if (offlineEvents.length > 0) {
+        const last = offlineEvents[0];
+        const phone = (last.metadata?.phone as string) || (last.metadata?.instanceName as string) || 'desconhecido';
+        return {
+          id: `anom_wa_off_${Date.now()}`,
+          rule_id: 'RULE_WHATSAPP_INSTANCE_OFFLINE',
+          title: 'Instância WhatsApp Desconectada',
+          description: `A instância WhatsApp (${phone}) perdeu a conexão com o servidor de mensagens.`,
+          severity: 'critical',
+          metric_name: 'whatsapp.instance.offline_count',
+          current_value: offlineEvents.length,
+          threshold_value: 1,
+          detected_at: new Date().toISOString(),
+          recommended_remediation: 'Verificar status da Uazapi e redefinir circuito operacional.',
+          auto_remediation_available: true,
+        };
+      }
+      return null;
+    },
+  },
+
+  // 7. Stalled Broadcast Queue
+  {
+    rule_id: 'RULE_BROADCAST_STALLED',
+    title: 'Campanha de Transmissão Estagnada na Fila',
+    severity: 'warning',
+    check: (events) => {
+      const stalledEvents = events.filter(
+        (e) => e.category === 'broadcast_queue' && e.metric_name === 'broadcast.stalled'
+      );
+      if (stalledEvents.length > 0) {
+        return {
+          id: `anom_bcast_${Date.now()}`,
+          rule_id: 'RULE_BROADCAST_STALLED',
+          title: 'Disparo em Massa Estagnado',
+          description: `Identificada campanha presa em status de envio sem progresso recente.`,
+          severity: 'warning',
+          metric_name: 'broadcast.stalled_count',
+          current_value: stalledEvents.length,
+          threshold_value: 1,
+          detected_at: new Date().toISOString(),
+          recommended_remediation: 'Desobstruir campanhas estagnadas e atualizar status para concluído.',
+          auto_remediation_available: true,
+        };
+      }
+      return null;
+    },
+  },
 ];
 
 /**
