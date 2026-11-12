@@ -4,7 +4,7 @@ import {
   CreditCard,
   Layers,
   Radio,
-  Activity,
+  Sparkles,
   Settings,
   type LucideIcon,
 } from 'lucide-react';
@@ -76,10 +76,10 @@ export const ADMIN_SECTION_META: Record<AdminMasterSection, AdminSectionMeta> = 
   },
   telemetry: {
     group: 'system',
-    icon: Activity,
+    icon: Sparkles,
     titleKey: 'tabTelemetry',
-    defaultTitle: 'Telemetria',
-    desc: 'Observabilidade em tempo real, cron autônomo e auto-recuperação',
+    defaultTitle: 'Uso & Melhorias',
+    desc: 'Monitoramento de uso LGPD, captura de bugs silenciosos e backlog 0-5★',
   },
   governance: {
     group: 'system',

@@ -8,7 +8,7 @@ import {
   CreditCard,
   Layers,
   Radio,
-  Activity,
+  Sparkles,
   Settings,
   TrendingUp,
   DollarSign,
@@ -110,11 +110,11 @@ export function AdminMasterOverview({
     },
     {
       section: 'telemetry',
-      title: 'Telemetria & Auto-Heal',
-      icon: Activity,
-      iconTone: 'text-purple-500 bg-purple-500/10 border-purple-500/20',
-      subtitle: 'Monitoramento contínuo (cron 2 min) · Auto-recuperação ativa',
-      badge: 'Health 100%',
+      title: 'Uso, Bugs & Melhorias',
+      icon: Sparkles,
+      iconTone: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+      subtitle: 'Telemetria de uso LGPD · Captura de bugs silenciosos e backlog 0-5★',
+      badge: 'Radar 5★',
     },
     {
       section: 'governance',
@@ -188,7 +188,7 @@ export function AdminMasterOverview({
               </span>
             </div>
             <div className="text-xs text-muted-foreground mt-0.5">
-              Todos os subsistemas saudáveis · Shards ativos · Telemetria automática executando a cada 2 min.
+              Auto-Heal autônomo ativo em segundo plano (2 min) · Shards online · Monitoramento de uso ativo.
             </div>
           </div>
         </div>
@@ -200,7 +200,7 @@ export function AdminMasterOverview({
             onClick={() => onSelect('telemetry')}
             className="text-xs border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10 shrink-0"
           >
-            Ver Telemetria
+            Uso & Melhorias
           </Button>
         </div>
       </Card>

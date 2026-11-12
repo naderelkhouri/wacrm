@@ -9,6 +9,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { PresenceHeartbeat } from "@/components/presence/presence-heartbeat";
+import { UsageTelemetryTracker } from "@/components/telemetry/usage-telemetry-tracker";
 import { cn } from "@/lib/utils";
 
 // Auth-gated dashboard shell. Extracted from the layout so the layout
@@ -53,6 +54,7 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
       {/* Reports this tab's online/away presence once we know a user is
           signed in. Headless — renders nothing. */}
       <PresenceHeartbeat />
+      <UsageTelemetryTracker />
       <Sidebar open={sidebarOpen} onClose={closeSidebar} />
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* On mobile inside an active chat thread, hide the top header to give 100% space to the conversation header */}

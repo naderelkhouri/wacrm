@@ -47,7 +47,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { AdminGlobalWhatsAppPanel } from "@/components/admin/admin-global-whatsapp-panel";
-import { AdminTelemetryDashboard } from "@/components/admin/admin-telemetry-dashboard";
+import { AdminProductRadarPanel } from "@/components/admin/admin-product-radar-panel";
 import { AdminUazapiNodesPanel } from "@/components/admin/admin-uazapi-nodes-panel";
 import {
   AdminMasterSection,
@@ -357,7 +357,7 @@ function AdminPageInner() {
   const hints: Partial<Record<AdminMasterSection, ReactNode>> = useMemo(
     () => ({
       tenants: tenants.length > 0 ? tenants.length : undefined,
-      telemetry: "100%",
+      telemetry: "5★",
     }),
     [tenants.length]
   );
@@ -668,7 +668,7 @@ function AdminPageInner() {
 
     "global-whatsapp": <AdminGlobalWhatsAppPanel />,
 
-    telemetry: <AdminTelemetryDashboard />,
+    telemetry: <AdminProductRadarPanel />,
 
     governance: (
       <div className="grid gap-6 md:grid-cols-2">
