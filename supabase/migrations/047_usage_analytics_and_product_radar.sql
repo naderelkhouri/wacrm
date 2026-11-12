@@ -13,10 +13,10 @@ CREATE TABLE IF NOT EXISTS public.system_page_views (
   module_name TEXT NOT NULL DEFAULT 'Outro',
   referrer TEXT,
   device TEXT NOT NULL DEFAULT 'desktop' CHECK (device IN ('mobile', 'desktop', 'tablet')),
-  browser TEXT DEFAULT 'Chrome',
+  browser TEXT,
   city TEXT,
   region TEXT,
-  country TEXT DEFAULT 'BR',
+  country TEXT,
   account_id UUID REFERENCES public.accounts(id) ON DELETE SET NULL,
   account_name TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()

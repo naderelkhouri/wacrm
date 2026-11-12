@@ -72,9 +72,10 @@ export async function POST(req: NextRequest) {
 
     const supabaseAdmin = getSupabaseAdmin();
     const ua = req.headers.get('user-agent') || '';
-    const city = req.headers.get('cf-ipcity') || body.city || 'São Paulo';
-    const region = req.headers.get('cf-region') || 'SP';
-    const country = req.headers.get('cf-ipcountry') || 'BR';
+    const rawCity = req.headers.get('cf-ipcity') || req.headers.get('x-vercel-ip-city') || null;
+    const city = rawCity ? decodeURIComponent(rawCity) : null;
+    const region = req.headers.get('cf-region') || req.headers.get('x-vercel-ip-country-region') || null;
+    const country = req.headers.get('cf-ipcountry') || req.headers.get('x-vercel-ip-country') || null;
 
     // Handle automatic silent bug capture
     if (eventType === 'silent_error') {

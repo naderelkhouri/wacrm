@@ -108,11 +108,13 @@ export async function GET() {
       const dev = v.device || 'desktop';
       deviceMap.set(dev, (deviceMap.get(dev) || 0) + 1);
 
-      const br = v.browser || 'Chrome';
-      browserMap.set(br, (browserMap.get(br) || 0) + 1);
+      if (v.browser) {
+        browserMap.set(v.browser, (browserMap.get(v.browser) || 0) + 1);
+      }
 
-      const ct = v.city || 'São Paulo';
-      cityMap.set(ct, (cityMap.get(ct) || 0) + 1);
+      if (v.city) {
+        cityMap.set(v.city, (cityMap.get(v.city) || 0) + 1);
+      }
     }
 
     const topModules = Array.from(moduleMap.values())
