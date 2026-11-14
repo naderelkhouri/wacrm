@@ -27,7 +27,13 @@ interface MetaPhoneInfo {
   id: string;
   display_phone_number: string;
   verified_name?: string;
+  name_status?: string;
   quality_rating?: string;
+  messaging_limit_tier?: string;
+  status?: string;
+  account_mode?: string;
+  throughput_level?: string;
+  platform_type?: string;
 }
 
 interface GlobalConfigData {
@@ -357,21 +363,47 @@ export function AdminGlobalWhatsAppPanel() {
 
         {phoneInfo && status === 'connected' && (
           <CardContent className="pt-0">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 p-3.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-xs">
               <div>
                 <p className="text-muted-foreground font-medium">Número Conectado</p>
                 <p className="font-semibold text-foreground text-sm mt-0.5">{phoneInfo.display_phone_number}</p>
               </div>
               <div>
-                <p className="text-muted-foreground font-medium">Nome Comercial Verificado</p>
-                <p className="font-semibold text-foreground text-sm mt-0.5">{phoneInfo.verified_name || 'Configurado na Meta'}</p>
+                <p className="text-muted-foreground font-medium">Nome Verificado</p>
+                <p className="font-semibold text-foreground text-sm mt-0.5 truncate">{phoneInfo.verified_name || 'Configurado na Meta'}</p>
               </div>
               <div>
-                <p className="text-muted-foreground font-medium">Qualidade da Linha</p>
+                <p className="text-muted-foreground font-medium">Qualidade (Meta)</p>
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                  <p className="font-semibold text-emerald-500">{phoneInfo.quality_rating || 'HIGH'}</p>
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      phoneInfo.quality_rating === 'RED'
+                        ? 'bg-red-500'
+                        : phoneInfo.quality_rating === 'YELLOW'
+                          ? 'bg-amber-500'
+                          : 'bg-emerald-500'
+                    }`}
+                  />
+                  <p className="font-semibold text-emerald-500">{phoneInfo.quality_rating || 'GREEN'}</p>
                 </div>
+              </div>
+              <div>
+                <p className="text-muted-foreground font-medium">Limite de Disparo</p>
+                <p className="font-semibold text-foreground text-sm mt-0.5 font-mono">
+                  {phoneInfo.messaging_limit_tier || 'TIER_1K'}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground font-medium">Throughput API</p>
+                <p className="font-semibold text-foreground text-sm mt-0.5 font-mono">
+                  {phoneInfo.throughput_level || 'STANDARD'}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground font-medium">Status da Conta</p>
+                <p className="font-semibold text-foreground text-sm mt-0.5 font-mono">
+                  {phoneInfo.status || phoneInfo.account_mode || 'CONNECTED'}
+                </p>
               </div>
             </div>
           </CardContent>

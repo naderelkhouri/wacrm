@@ -77,16 +77,24 @@ export async function POST(req: NextRequest) {
     const region = req.headers.get('cf-region') || req.headers.get('x-vercel-ip-country-region') || null;
     const country = req.headers.get('cf-ipcountry') || req.headers.get('x-vercel-ip-country') || null;
 
-    // Handle automatic silent bug capture
-    if (eventType === 'silent_error') {
-      const title = typeof body.title === 'string' ? body.title.slice(0, 180) : 'Erro de execução silencioso';
+    // Handle automatic silent bug or slow feature capture
+    if (eventType === 'silent_error' || eventType === 'slow_feature') {
+      const isSlow = eventType === 'slow_feature';
+      const itemType = isSlow ? 'melhoria' : 'bug';
+      const itemSource = isSlow ? 'usage_heuristic' : 'auto_detector';
+      const title =
+        typeof body.title === 'string'
+          ? body.title.slice(0, 180)
+          : isSlow
+            ? 'Lentidão de Feature Detectada'
+            : 'Erro de execução silencioso';
       const description = typeof body.description === 'string' ? body.description.slice(0, 1000) : '';
       const modulePath = rawPath;
 
       const { data: existing } = await supabaseAdmin
         .from('system_product_backlog')
         .select('id, occurrence_count')
-        .eq('type', 'bug')
+        .eq('type', itemType)
         .eq('title', title)
         .neq('status', 'concluido')
         .neq('status', 'arquivado')
@@ -102,14 +110,14 @@ export async function POST(req: NextRequest) {
           .eq('id', existing.id);
       } else {
         await supabaseAdmin.from('system_product_backlog').insert({
-          type: 'bug',
-          source: 'auto_detector',
+          type: itemType,
+          source: itemSource,
           title,
           description,
           module_path: modulePath,
           status: 'novo',
-          rating: 4,
-          notes: `Capturado automaticamente em ${new Date().toLocaleString('pt-BR')} (${detectBrowser(ua)} / ${detectDevice(ua)}).`,
+          rating: isSlow ? 4 : 4,
+          notes: `Capturado automaticamente via Kwin/Telemetry em ${new Date().toLocaleString('pt-BR')} (${detectBrowser(ua)} / ${detectDevice(ua)}).`,
           metadata: body.metadata || {},
           occurrence_count: 1,
         });

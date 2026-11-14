@@ -54,12 +54,17 @@ import {
   blankButtonsPayload,
 } from "@/components/interactive/interactive-builder";
 import { validateInteractivePayload } from "@/lib/whatsapp/interactive";
-import type { InteractiveMessagePayload, QuickReply } from "@/types";
+import type { Contact, Conversation, InteractiveMessagePayload, QuickReply } from "@/types";
 import { QuickReplyPicker } from "./quick-reply-picker";
 import {
   ALL_AGENCY_SPECIALISTS,
   getAgencySpecialist,
 } from "@/lib/ai/agency-specialists";
+import {
+  buildMessageVariables,
+  getUndefinedVariablesInMessage,
+  replaceVariablesInMessage,
+} from "@/lib/chatwoot/sla-and-canned";
 
 /** Media content types an agent can send from the composer. */
 export type ComposerMediaKind = "image" | "video" | "document" | "audio";
@@ -116,6 +121,8 @@ interface MediaDraft {
 
 interface MessageComposerProps {
   conversationId: string;
+  contact?: Contact | null;
+  conversation?: Conversation | null;
   sessionExpired: boolean;
   onSend: (text: string, replyToId?: string) => void;
   onSendMedia: (payload: SendMediaPayload) => void;
@@ -138,6 +145,8 @@ const OPUS_ENCODER_PATH = "/opus/encoderWorker.min.js";
 
 export function MessageComposer({
   conversationId,
+  contact,
+  conversation,
   sessionExpired,
   onSend,
   onSendMedia,
@@ -225,13 +234,31 @@ export function MessageComposer({
     el.style.height = `${Math.min(el.scrollHeight, 96)}px`;
   }, []);
 
+  const variableMap = buildMessageVariables({
+    contact,
+    conversation,
+  });
+
+  const undefinedVars = getUndefinedVariablesInMessage(text, variableMap);
+
   const handleSend = useCallback(async () => {
     const trimmed = text.trim();
     if (!trimmed || sending || sessionExpired) return;
 
+    const currentVars = buildMessageVariables({ contact, conversation });
+    const missing = getUndefinedVariablesInMessage(trimmed, currentVars);
+    if (missing.length > 0) {
+      toast.error(
+        `Variáveis não preenchidas detectadas: ${missing.map((v) => `{{${v}}}`).join(", ")}. Edite antes de enviar.`
+      );
+      return;
+    }
+
+    const interpolated = replaceVariablesInMessage(trimmed, currentVars);
+
     setSending(true);
     try {
-      onSend(trimmed, replyTo?.id);
+      onSend(interpolated, replyTo?.id);
       setText("");
       if (textareaRef.current) {
         textareaRef.current.style.height = "auto";
@@ -239,7 +266,7 @@ export function MessageComposer({
     } finally {
       setSending(false);
     }
-  }, [text, sending, sessionExpired, onSend, replyTo?.id]);
+  }, [text, sending, sessionExpired, onSend, replyTo?.id, contact, conversation]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -377,7 +404,9 @@ export function MessageComposer({
         openInteractiveBuilder(qr.interactive_payload);
         return;
       }
-      const body = qr.content_text ?? "";
+      const rawBody = qr.content_text ?? "";
+      const currentVars = buildMessageVariables({ contact, conversation });
+      const body = replaceVariablesInMessage(rawBody, currentVars);
       // Separate the snippet from any existing draft with a newline so the
       // words don't run together ("Thanks" + "we'll…" → "Thankswe'll…").
       setText((prev) =>
@@ -392,7 +421,7 @@ export function MessageComposer({
         }
       });
     },
-    [openInteractiveBuilder, adjustHeight],
+    [openInteractiveBuilder, adjustHeight, contact, conversation],
   );
 
   // Upload a captured file to chat-media and stage it as a draft.
@@ -836,10 +865,19 @@ export function MessageComposer({
         </div>
       )}
 
+      {!draft && !recording && undefinedVars.length > 0 && (
+        <div className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-400">
+          <span className="font-semibold">Variáveis órfãs sem valor no contato:</span>
+          <span className="font-mono">
+            {undefinedVars.map((v) => `{{${v}}}`).join(", ")}
+          </span>
+        </div>
+      )}
+
       {/* Hint sits outside the flex row so its height doesn't push
           `items-end` buttons below the textarea. Indented to line up
           under the textarea left edge. */}
-      {!draft && !recording && (
+      {!draft && !recording && undefinedVars.length === 0 && (
         <p className="mt-1 pl-2 sm:pl-[5.5rem] text-[10px] text-muted-foreground">
           {t("draftHint")}
         </p>

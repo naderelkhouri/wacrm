@@ -9,7 +9,9 @@ import {
 } from "@/lib/inbox/conversations";
 import { cn } from "@/lib/utils";
 import type { Conversation, ConversationStatus, Tag } from "@/types";
-import { Search, ChevronDown, X } from "lucide-react";
+import { Search, ChevronDown, X, Clock } from "lucide-react";
+import { picoSearch } from "@/lib/chatwoot/pico-search";
+import { evaluateConversationSla } from "@/lib/chatwoot/sla-and-canned";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR, es, enUS } from "date-fns/locale";
 import { useTranslations, useLocale } from "next-intl";
@@ -241,13 +243,17 @@ export function ConversationList({
     }
 
     if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter((c) => {
-        const name = c.contact?.name?.toLowerCase() ?? "";
-        const phone = c.contact?.phone?.toLowerCase() ?? "";
-        const lastMsg = c.last_message_text?.toLowerCase() ?? "";
-        return name.includes(q) || phone.includes(q) || lastMsg.includes(q);
-      });
+      result = picoSearch(
+        result,
+        search,
+        [
+          { name: "contact.name", weight: 3 },
+          { name: "contact.phone", weight: 2 },
+          { name: "contact.company", weight: 2 },
+          { name: "last_message_text", weight: 1 },
+        ],
+        { threshold: 0.25 }
+      );
     }
 
     return result;
@@ -609,6 +615,8 @@ function ConversationItem({
       })
     : "";
 
+  const slaBadge = evaluateConversationSla(conversation);
+
   return (
     <button
       onClick={handleClick}
@@ -659,20 +667,40 @@ function ConversationItem({
             />
           </div>
         </div>
-        {conversation.whatsapp_instance?.name && (
-          <div className="mt-1 flex items-center">
-            <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border border-border bg-muted/60 text-muted-foreground">
-              <span
-                className="h-1.5 w-1.5 rounded-full shrink-0"
-                style={{
-                  backgroundColor:
-                    conversation.whatsapp_instance.color || "#25D366",
-                }}
-              />
-              <span className="truncate max-w-[120px]">
-                {conversation.whatsapp_instance.name}
+        {(conversation.whatsapp_instance?.name || slaBadge) && (
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {conversation.whatsapp_instance?.name && (
+              <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border border-border bg-muted/60 text-muted-foreground">
+                <span
+                  className="h-1.5 w-1.5 rounded-full shrink-0"
+                  style={{
+                    backgroundColor:
+                      conversation.whatsapp_instance.color || "#25D366",
+                  }}
+                />
+                <span className="truncate max-w-[110px]">
+                  {conversation.whatsapp_instance.name}
+                </span>
               </span>
-            </span>
+            )}
+            {slaBadge && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border",
+                  slaBadge.isMissed
+                    ? "border-red-500/40 bg-red-500/15 text-red-400"
+                    : slaBadge.isWarning
+                      ? "border-amber-500/40 bg-amber-500/15 text-amber-400"
+                      : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                )}
+                title={`${slaBadge.label} (${slaBadge.timeText})`}
+              >
+                <Clock className="h-2.5 w-2.5 shrink-0" />
+                <span>
+                  {slaBadge.isMissed ? `SLA -${slaBadge.timeText}` : `SLA ${slaBadge.timeText}`}
+                </span>
+              </span>
+            )}
           </div>
         )}
       </div>

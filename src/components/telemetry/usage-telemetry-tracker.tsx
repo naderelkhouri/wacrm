@@ -2,18 +2,26 @@
 
 import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
+import { kwinProfiler, type FeatureTimer } from '@/lib/chatwoot/kwin-profiler';
 
 export function UsageTelemetryTracker() {
   const pathname = usePathname();
   const lastTrackedPathRef = useRef<string | null>(null);
+  const routeTimerRef = useRef<FeatureTimer | null>(null);
 
-  // 1. Track route transitions (LGPD-compliant, ignores /admin)
+  // 1. Track route transitions (LGPD-compliant, ignores /admin) + Kwin.js transition timing
   useEffect(() => {
     if (!pathname || pathname.startsWith('/admin')) return;
     if (lastTrackedPathRef.current === pathname) return;
     lastTrackedPathRef.current = pathname;
 
+    // Start Kwin microsecond profiler for route interactive readiness
+    routeTimerRef.current = kwinProfiler.start(`Navegação ${pathname}`, 2200);
+
     const timer = setTimeout(() => {
+      routeTimerRef.current?.mark('dom_settled');
+      routeTimerRef.current?.stop();
+
       fetch('/api/usage/track', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

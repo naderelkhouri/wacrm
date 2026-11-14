@@ -20,7 +20,16 @@ export interface MetaPhoneInfo {
   id: string
   display_phone_number: string
   verified_name?: string
+  name_status?: string
   quality_rating?: string
+  messaging_limit_tier?: string
+  status?: string
+  account_mode?: string
+  code_verification_status?: string
+  throughput_level?: string
+  platform_type?: string
+  is_Risky?: boolean
+  risk_reasons?: string[]
 }
 
 interface MetaErrorResponse {
@@ -67,22 +76,91 @@ export interface VerifyPhoneNumberArgs {
   accessToken: string
 }
 
+const RISKY_QUALITY_RATINGS = new Set(['YELLOW', 'RED', 'LOW'])
+const RISKY_PHONE_STATUSES = new Set([
+  'BANNED',
+  'RESTRICTED',
+  'RATE_LIMITED',
+  'FLAGGED',
+  'DISCONNECTED',
+  'DELETED',
+])
+
 /**
- * Verify a Meta phone number ID by fetching its public metadata
- * (display_phone_number, verified_name, quality_rating).
+ * Verify a Meta phone number ID by fetching its public metadata and
+ * full HealthService diagnostics (quality_rating, messaging_limit_tier,
+ * status, account_mode, throughput_level — adapted from Chatwoot HealthService).
  */
 export async function verifyPhoneNumber(
   args: VerifyPhoneNumberArgs
 ): Promise<MetaPhoneInfo> {
   const { phoneNumberId, accessToken } = args
-  const url = `${META_API_BASE}/${phoneNumberId}?fields=id,display_phone_number,verified_name,quality_rating`
-  const response = await fetch(url, {
+  const richFields = [
+    'id',
+    'display_phone_number',
+    'verified_name',
+    'name_status',
+    'quality_rating',
+    'whatsapp_business_manager_messaging_limit',
+    'status',
+    'account_mode',
+    'code_verification_status',
+    'throughput',
+    'platform_type',
+  ].join(',')
+
+  let raw: Record<string, unknown> | null = null
+
+  // First try rich HealthService field set; fallback to minimal 4 fields if an older token/version rejects extra fields
+  const richUrl = `${META_API_BASE}/${phoneNumberId}?fields=${richFields}`
+  const richRes = await fetch(richUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
-  if (!response.ok) {
-    await throwMetaError(response, `Meta API error: ${response.status}`)
+
+  if (richRes.ok) {
+    raw = (await richRes.json()) as Record<string, unknown>
+  } else {
+    const basicUrl = `${META_API_BASE}/${phoneNumberId}?fields=id,display_phone_number,verified_name,quality_rating`
+    const basicRes = await fetch(basicUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!basicRes.ok) {
+      await throwMetaError(basicRes, `Meta API error: ${basicRes.status}`)
+    }
+    raw = (await basicRes.json()) as Record<string, unknown>
   }
-  return response.json()
+
+  const quality = typeof raw.quality_rating === 'string' ? raw.quality_rating.toUpperCase() : undefined
+  const status = typeof raw.status === 'string' ? raw.status.toUpperCase() : undefined
+  const throughputObj = raw.throughput as { level?: string } | undefined
+
+  const riskReasons: string[] = []
+  if (quality && RISKY_QUALITY_RATINGS.has(quality)) {
+    riskReasons.push(`Qualidade da linha degradada (${quality})`)
+  }
+  if (status && RISKY_PHONE_STATUSES.has(status)) {
+    riskReasons.push(`Status crítico na Meta (${status})`)
+  }
+
+  return {
+    id: String(raw.id || phoneNumberId),
+    display_phone_number: String(raw.display_phone_number || ''),
+    verified_name: typeof raw.verified_name === 'string' ? raw.verified_name : undefined,
+    name_status: typeof raw.name_status === 'string' ? raw.name_status : undefined,
+    quality_rating: quality,
+    messaging_limit_tier:
+      typeof raw.whatsapp_business_manager_messaging_limit === 'string'
+        ? raw.whatsapp_business_manager_messaging_limit
+        : undefined,
+    status,
+    account_mode: typeof raw.account_mode === 'string' ? raw.account_mode : undefined,
+    code_verification_status:
+      typeof raw.code_verification_status === 'string' ? raw.code_verification_status : undefined,
+    throughput_level: throughputObj?.level,
+    platform_type: typeof raw.platform_type === 'string' ? raw.platform_type : undefined,
+    is_Risky: riskReasons.length > 0,
+    risk_reasons: riskReasons,
+  }
 }
 
 // ============================================================

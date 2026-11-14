@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Loader2, MessageSquare, Zap } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2, MessageSquare, Search, Zap } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import {
@@ -10,8 +10,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import type { QuickReply } from "@/types";
 import { interactivePayloadPreviewText } from "@/lib/whatsapp/interactive";
+import { picoSearch } from "@/lib/chatwoot/pico-search";
 
 interface QuickReplyPickerProps {
   open: boolean;
@@ -32,9 +34,13 @@ export function QuickReplyPicker({
   const t = useTranslations("Inbox.composer");
   const [items, setItems] = useState<QuickReply[]>([]);
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setSearch("");
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     void (async () => {
@@ -53,24 +59,48 @@ export function QuickReplyPicker({
     };
   }, [open]);
 
+  const filteredItems = useMemo(() => {
+    if (!search.trim()) return items;
+    return picoSearch(
+      items,
+      search,
+      [
+        { name: "title", weight: 3 },
+        { name: "content_text", weight: 1 },
+      ],
+      { threshold: 0.25 }
+    );
+  }, [items, search]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{t("quickReplies")}</DialogTitle>
         </DialogHeader>
+        {!loading && items.length > 0 && (
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar atalho ou resposta rápida (fuzzy)..."
+              className="pl-8 h-8 text-xs"
+            />
+          </div>
+        )}
         <div className="max-h-[60vh] overflow-y-auto">
           {loading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
-          ) : items.length === 0 ? (
+          ) : filteredItems.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               {t("quickRepliesEmpty")}
             </p>
           ) : (
             <ul className="flex flex-col gap-1">
-              {items.map((qr) => (
+              {filteredItems.map((qr) => (
                 <li key={qr.id}>
                   <button
                     type="button"

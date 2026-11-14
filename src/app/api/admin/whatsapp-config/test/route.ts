@@ -79,11 +79,45 @@ export async function POST(request: Request) {
       );
     }
 
-    // Call Meta Graph API
+    // Call Meta Graph API (Chatwoot HealthService v24 diagnostic fields)
     const phoneInfo = await verifyPhoneNumber({
       phoneNumberId,
       accessToken: token,
     });
+
+    // If quality is YELLOW/RED or status is RESTRICTED/BANNED, automatically log a 5★ alert in Product Radar
+    if (phoneInfo.is_Risky && phoneInfo.risk_reasons?.length) {
+      const alertTitle = `Alerta de Saúde WhatsApp (${phoneInfo.display_phone_number}): ${phoneInfo.risk_reasons.join(' | ')}`;
+      const { data: existingAlert } = await supabaseAdmin
+        .from('system_product_backlog')
+        .select('id, occurrence_count')
+        .eq('title', alertTitle)
+        .neq('status', 'concluido')
+        .maybeSingle();
+
+      if (existingAlert) {
+        await supabaseAdmin
+          .from('system_product_backlog')
+          .update({
+            occurrence_count: (existingAlert.occurrence_count || 1) + 1,
+            last_seen_at: new Date().toISOString(),
+          })
+          .eq('id', existingAlert.id);
+      } else {
+        await supabaseAdmin.from('system_product_backlog').insert({
+          type: 'bug',
+          source: 'auto_detector',
+          title: alertTitle,
+          description: `O HealthService detectou degradação na linha ${phoneInfo.display_phone_number} (${phoneInfo.verified_name || 'Meta'}). Qualidade: ${phoneInfo.quality_rating || 'N/A'}, Status: ${phoneInfo.status || 'N/A'}, Tier: ${phoneInfo.messaging_limit_tier || 'N/A'}.`,
+          module_path: '/admin?tab=global-whatsapp',
+          status: 'novo',
+          rating: 5,
+          notes: 'Gerado automaticamente pelo monitor de saúde WhatsApp Cloud API.',
+          metadata: phoneInfo,
+          occurrence_count: 1,
+        });
+      }
+    }
 
     return NextResponse.json({
       success: true,
