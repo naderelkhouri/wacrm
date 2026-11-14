@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { evaluateUtilityRubric } from '@/lib/whatsapp/utility-rubric'
 
 interface ComplianceRisk {
   severity: 'critical' | 'warning' | 'info'
@@ -67,27 +68,50 @@ export async function POST(request: Request) {
       score -= 10
     }
 
-    // 2. Check Category Misclassification (Utility vs Marketing)
-    const promotionalKeywords = [
-      'desconto', 'promocao', 'promoção', 'oferta', 'compre', 'aproveite',
-      'cupom', 'black friday', 'frete gratis', 'frete grátis', 'imperdivel',
-      'discount', 'sale', 'offer', 'coupon', 'free shipping', 'special price'
-    ]
+    // 2. Chatwoot Utility vs Marketing Rubric Analysis
+    const rubric = evaluateUtilityRubric(bodyText)
 
-    const lowerBody = bodyText.toLowerCase()
-    const hasPromoKeyword = promotionalKeywords.some((kw) => lowerBody.includes(kw))
-
-    if (category === 'UTILITY' && hasPromoKeyword) {
-      risks.push({
-        severity: 'critical',
-        title: 'Conflito de Categoria: Conteúdo Promocional em UTILITY',
-        description: 'O texto contém palavras de promoção/vendas, mas a categoria selecionada é UTILITY. A Meta rejeitará o modelo ou reclassificará para MARKETING com custo maior.',
-        rule: 'META_CATEGORY_MISMATCH',
-      })
-      score -= 35
+    if (category === 'UTILITY' && !rubric.isCompliantUtility) {
+      if (rubric.detectedMarketingTriggers.length > 0) {
+        risks.push({
+          severity: 'critical',
+          title: 'Risco de Reclassificação para MARKETING (Aumento de Custo)',
+          description: `Gatilhos comerciais detectados: ${rubric.detectedMarketingTriggers.join(', ')}. A Meta reclassificará ou rejeitará.`,
+          rule: 'META_RUBRIC_MARKETING_TRIGGER',
+        })
+        score -= 40
+      }
+      if (rubric.detectedTransactionalTriggers.length === 0) {
+        risks.push({
+          severity: 'warning',
+          title: 'Ausência de Contexto Transacional Claro',
+          description: 'Modelos de Utilidade devem conter referência explícita a status de pedido, fatura, chamado ou agendamento.',
+          rule: 'META_RUBRIC_TRANSACTION_CONTEXT_MISSING',
+        })
+        score -= 15
+      }
+      if (!rubric.hasActionableStep) {
+        risks.push({
+          severity: 'info',
+          title: 'Recomendação de Próximo Passo',
+          description: 'A Meta recomenda incluir instruções diretas de suporte (ex: "Se precisar de ajuda, responda a esta mensagem").',
+          rule: 'META_RUBRIC_ACTIONABLE_STEP_RECOMMENDED',
+        })
+      }
     }
 
-    // 3. Check URL Shorteners (bit.ly, tinyurl, etc.)
+    // 3. Prohibited Content Check
+    if (rubric.detectedProhibitedTriggers.length > 0) {
+      risks.push({
+        severity: 'critical',
+        title: 'Conteúdo Proibido pelas Diretrizes da Meta',
+        description: `Detectado: ${rubric.detectedProhibitedTriggers.join(', ')}. Risco imediato de bloqueio da WABA.`,
+        rule: 'META_PROHIBITED_CONTENT',
+      })
+      score -= 50
+    }
+
+    // 4. Check URL Shorteners (bit.ly, tinyurl, etc.)
     if (/(bit\.ly|tinyurl\.com|t\.co|goo\.gl|is\.gd|cutt\.ly)/i.test(bodyText)) {
       risks.push({
         severity: 'critical',
@@ -98,7 +122,7 @@ export async function POST(request: Request) {
       score -= 30
     }
 
-    // 4. Excessive Punctuation & Emojis
+    // 5. Excessive Punctuation & Emojis
     if (/([!?]){3,}/.test(bodyText)) {
       risks.push({
         severity: 'warning',
@@ -111,13 +135,13 @@ export async function POST(request: Request) {
 
     // Generate Optimized Text
     const optimizedText = bodyText
-      // Fix single braces {1} -> {{1}}
       .replace(/\{(\d+)\}/g, '{{$1}}')
-      // Fix multiple exclamation marks
       .replace(/!{2,}/g, '!')
       .replace(/\?{2,}/g, '?')
 
-    const suggestedCategory = category === 'UTILITY' && hasPromoKeyword ? 'MARKETING' : category
+    const suggestedCategory = category === 'UTILITY' && rubric.suggestedCategory === 'MARKETING'
+      ? 'MARKETING'
+      : category
 
     const finalScore = Math.max(0, Math.min(100, score))
     const passed = finalScore >= 70 && !risks.some((r) => r.severity === 'critical')
@@ -128,6 +152,7 @@ export async function POST(request: Request) {
       risks,
       suggestedCategory,
       optimizedText,
+      rubric,
     })
   } catch (error: unknown) {
     console.error('[/api/whatsapp/templates/analyze-compliance] Error:', error)

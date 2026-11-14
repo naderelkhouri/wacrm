@@ -13,6 +13,9 @@ import {
   handleTemplateWebhookChange,
   isTemplateWebhookField,
 } from '@/lib/whatsapp/template-webhook'
+import { classifyConversationUrgency } from '@/lib/ai/auto-triage'
+import { BusinessHoursScheduler, type BusinessHoursConfig } from '@/lib/chatwoot/business-hours'
+import { engineSendText } from '@/lib/flows/meta-send'
 import {
   isUazapiWebhookPayload,
   extractUazapiWebhookToken,
@@ -954,6 +957,75 @@ async function processMessage(
   // so the broadcast's `replied_count` advances (via the aggregate
   // trigger installed in migration 003).
   await flagBroadcastReplyIfAny(accountId, contactRecord.id)
+
+  // ============================================================
+  // AI Auto-Triage & Urgency Classification (Chatwoot Captain inspired)
+  // ============================================================
+  try {
+    const rawText = contentText ?? message.text?.body ?? ''
+    if (rawText.trim()) {
+      const triage = classifyConversationUrgency(rawText)
+      await supabaseAdmin()
+        .from('conversations')
+        .update({
+          priority: triage.priority,
+          auto_triage_metadata: {
+            confidence: triage.confidence,
+            reason: triage.reason,
+            suggestedTags: triage.suggestedTags,
+            evaluated_at: new Date().toISOString(),
+          },
+        })
+        .eq('id', conversation.id)
+    }
+  } catch (err) {
+    console.warn('[webhook] auto-triage failed:', err)
+  }
+
+  // ============================================================
+  // Business Hours & Away Responder (Chatwoot business-hours inspired)
+  // ============================================================
+  try {
+    const { data: accountData } = await supabaseAdmin()
+      .from('accounts')
+      .select('business_hours_enabled, business_hours_config')
+      .eq('id', accountId)
+      .maybeSingle()
+
+    if (accountData?.business_hours_enabled) {
+      const bhConfig = accountData.business_hours_config as (BusinessHoursConfig & { away_message?: string }) | null
+      const scheduler = new BusinessHoursScheduler(bhConfig ?? undefined)
+      const isWorkTime = scheduler.isWorkingTime()
+
+      if (!isWorkTime) {
+        // Check if an away message was already sent to this conversation in the last 12 hours
+        const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString()
+        const { data: recentAway } = await supabaseAdmin()
+          .from('messages')
+          .select('id')
+          .eq('conversation_id', conversation.id)
+          .eq('sender_type', 'agent')
+          .ilike('content_text', '%fora do nosso horário de atendimento%')
+          .gte('created_at', twelveHoursAgo)
+          .limit(1)
+
+        if (!recentAway || recentAway.length === 0) {
+          const defaultAway = 'Olá! Recebemos sua mensagem, mas estamos fora do nosso horário de atendimento no momento. Responderemos assim que nossa equipe retornar!'
+          const awayText = bhConfig?.away_message || defaultAway
+
+          await engineSendText({
+            accountId,
+            userId: configOwnerUserId,
+            conversationId: conversation.id,
+            contactId: contactRecord.id,
+            text: awayText,
+          }).catch((sendErr) => console.warn('[webhook] business-hours away send failed:', sendErr))
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[webhook] business-hours check failed:', err)
+  }
 
   // ============================================================
   // Flow runner dispatch.

@@ -162,6 +162,8 @@ export interface Conversation {
   user_id: string;
   contact_id: string;
   status: ConversationStatus;
+  priority?: 'urgent' | 'high' | 'medium' | 'low';
+  auto_triage_metadata?: Record<string, unknown> | null;
   assigned_agent_id?: string;
   last_message_text?: string;
   last_message_at?: string;

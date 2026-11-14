@@ -667,8 +667,19 @@ function ConversationItem({
             />
           </div>
         </div>
-        {(conversation.whatsapp_instance?.name || slaBadge) && (
+        {(conversation.whatsapp_instance?.name || slaBadge || conversation.priority === 'urgent' || conversation.priority === 'high') && (
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {conversation.priority === 'urgent' && (
+              <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold border border-red-500/50 bg-red-500/20 text-red-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                URGENTE
+              </span>
+            )}
+            {conversation.priority === 'high' && (
+              <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold border border-amber-500/40 bg-amber-500/15 text-amber-400">
+                Alta
+              </span>
+            )}
             {conversation.whatsapp_instance?.name && (
               <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium border border-border bg-muted/60 text-muted-foreground">
                 <span
