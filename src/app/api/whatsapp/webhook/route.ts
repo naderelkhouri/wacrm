@@ -14,6 +14,7 @@ import {
   isTemplateWebhookField,
 } from '@/lib/whatsapp/template-webhook'
 import { classifyConversationUrgency } from '@/lib/ai/auto-triage'
+import { transcribeAudioAttachment } from '@/lib/ai/audio-transcribe'
 import { BusinessHoursScheduler, type BusinessHoursConfig } from '@/lib/chatwoot/business-hours'
 import { engineSendText } from '@/lib/flows/meta-send'
 import {
@@ -808,8 +809,25 @@ async function processMessage(
   }
 
   // Parse message content based on type
-  const { contentText, mediaUrl, mediaType, interactiveReplyId } =
+  const { contentText: parsedText, mediaUrl, mediaType, interactiveReplyId } =
     await parseMessageContent(message, accessToken)
+  let contentText = parsedText
+
+  // If inbound message is audio, attempt automatic speech-to-text transcription
+  if (message.type === 'audio' && mediaUrl) {
+    try {
+      const transcript = await transcribeAudioAttachment({
+        audioUrl: mediaUrl,
+        accountId,
+        db: supabaseAdmin(),
+      })
+      if (transcript) {
+        contentText = `🎤 ${transcript}`
+      }
+    } catch (sttErr) {
+      console.warn('[webhook] auto-transcription failed:', sttErr)
+    }
+  }
 
   // Resolve swipe-reply context if present. A missing parent is fine —
   // we just store NULL and the UI renders the message without a quote.

@@ -19,6 +19,7 @@ import { format } from "date-fns";
 import { ReplyQuote } from "./reply-quote";
 import { MessageReactions } from "./message-reactions";
 import { InteractivePreview } from "@/components/interactive/interactive-preview";
+import { AudioVoicePlayer } from "./audio-voice-player";
 import { useTranslations } from "next-intl";
 
 interface MessageBubbleProps {
@@ -120,7 +121,15 @@ function MediaImage({ url, alt }: { url: string; alt: string }) {
   );
 }
 
-function MessageContent({ message, t }: { message: Message, t: ReturnType<typeof useTranslations> }) {
+function MessageContent({
+  message,
+  t,
+  isFromMe,
+}: {
+  message: Message;
+  t: ReturnType<typeof useTranslations>;
+  isFromMe: boolean;
+}) {
   switch (message.content_type) {
     case "text":
       return (
@@ -169,9 +178,14 @@ function MessageContent({ message, t }: { message: Message, t: ReturnType<typeof
       return (
         <div>
           {message.media_url ? (
-            <audio src={message.media_url} controls className="max-w-60" />
+            <AudioVoicePlayer src={message.media_url} isFromMe={isFromMe} />
           ) : (
             <MediaUnavailable label={t("audio")} t={t} />
+          )}
+          {message.content_text && (
+            <p className="mt-1 text-xs text-muted-foreground/90 italic bg-muted/40 rounded px-2 py-1 border border-border/50">
+              {message.content_text}
+            </p>
           )}
         </div>
       );
@@ -295,7 +309,7 @@ export function MessageBubble({
             onPrimary={isAgent}
           />
         )}
-        <MessageContent message={message} t={t} />
+        <MessageContent message={message} t={t} isFromMe={isAgent} />
         <div
           className={cn(
             "mt-1 flex items-center gap-1",
