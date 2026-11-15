@@ -1133,15 +1133,22 @@ export function parseUazapiWebhookToMetaEntries(
       ? (payload.chat as Record<string, unknown>)
       : {};
 
+  // For outbound messages sent from our device (fromMe), msgObj.senderName or msgObj.pushName
+  // is the account owner's own name (e.g. "Nader El Khouri"). It must NEVER be attributed to
+  // the recipient/contact. Only use chat name if available, or fall back to recipient phone.
   const contactName = String(
-    msgObj.senderName ||
-      msgObj.pushName ||
-      chatObj.wa_name ||
-      chatObj.name ||
-      senderPhone
+    fromMe
+      ? chatObj.wa_name || chatObj.name || senderPhone
+      : msgObj.senderName ||
+          msgObj.pushName ||
+          chatObj.wa_name ||
+          chatObj.name ||
+          senderPhone
   ).trim();
 
-  // Extract avatar / profile picture URL if included in payload
+  // Extract avatar / profile picture URL if included in payload.
+  // For fromMe messages, msgObj.senderProfilePicUrl or msgObj.avatarUrl could belong to the sender,
+  // so prioritize chatObj or only take recipient chat avatar.
   const senderObj =
     payload.sender && typeof payload.sender === 'object'
       ? (payload.sender as Record<string, unknown>)
@@ -1152,20 +1159,24 @@ export function parseUazapiWebhookToMetaEntries(
       ? (payload.data as Record<string, unknown>)
       : {};
 
-  const rawAvatarCandidate =
-    (typeof chatObj.profilePicUrl === 'string' && chatObj.profilePicUrl) ||
-    (typeof chatObj.image === 'string' && chatObj.image) ||
-    (typeof chatObj.profile_picture === 'string' && chatObj.profile_picture) ||
-    (typeof msgObj.profilePicUrl === 'string' && msgObj.profilePicUrl) ||
-    (typeof msgObj.senderProfilePicUrl === 'string' && msgObj.senderProfilePicUrl) ||
-    (typeof msgObj.profile_picture === 'string' && msgObj.profile_picture) ||
-    (typeof msgObj.avatarUrl === 'string' && msgObj.avatarUrl) ||
-    (typeof senderObj.profilePicUrl === 'string' && senderObj.profilePicUrl) ||
-    (typeof senderObj.image === 'string' && senderObj.image) ||
-    (typeof dataObj.profilePicUrl === 'string' && dataObj.profilePicUrl) ||
-    (typeof dataObj.image === 'string' && dataObj.image) ||
-    (typeof payload.profilePicUrl === 'string' && payload.profilePicUrl) ||
-    '';
+  const rawAvatarCandidate = fromMe
+    ? (typeof chatObj.profilePicUrl === 'string' && chatObj.profilePicUrl) ||
+      (typeof chatObj.image === 'string' && chatObj.image) ||
+      (typeof chatObj.profile_picture === 'string' && chatObj.profile_picture) ||
+      ''
+    : (typeof chatObj.profilePicUrl === 'string' && chatObj.profilePicUrl) ||
+      (typeof chatObj.image === 'string' && chatObj.image) ||
+      (typeof chatObj.profile_picture === 'string' && chatObj.profile_picture) ||
+      (typeof msgObj.profilePicUrl === 'string' && msgObj.profilePicUrl) ||
+      (typeof msgObj.senderProfilePicUrl === 'string' && msgObj.senderProfilePicUrl) ||
+      (typeof msgObj.profile_picture === 'string' && msgObj.profile_picture) ||
+      (typeof msgObj.avatarUrl === 'string' && msgObj.avatarUrl) ||
+      (typeof senderObj.profilePicUrl === 'string' && senderObj.profilePicUrl) ||
+      (typeof senderObj.image === 'string' && senderObj.image) ||
+      (typeof dataObj.profilePicUrl === 'string' && dataObj.profilePicUrl) ||
+      (typeof dataObj.image === 'string' && dataObj.image) ||
+      (typeof payload.profilePicUrl === 'string' && payload.profilePicUrl) ||
+      '';
 
   const avatarUrl = /^https?:\/\//i.test(rawAvatarCandidate.trim())
     ? rawAvatarCandidate.trim()

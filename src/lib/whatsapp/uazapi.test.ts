@@ -226,7 +226,7 @@ describe('Uazapi WhatsApp Provider Client', () => {
       expect(val.messages?.[0].text?.body).toBe('Quero fazer um pedido');
     });
 
-    it('ignores group messages but normalizes fromMe outbound messages for 2-way sync', () => {
+    it('ignores group messages but normalizes fromMe outbound messages for 2-way sync without setting sender profile name as contact name', () => {
       expect(
         parseUazapiWebhookToMetaEntries(
           {
@@ -246,6 +246,7 @@ describe('Uazapi WhatsApp Provider Client', () => {
           EventType: 'messages',
           message: {
             chatid: '5511977776666@s.whatsapp.net',
+            senderName: 'Nader El Khouri', // Profile name of account holder sending the message
             fromMe: true,
             text: 'Enviada por mim',
           },
@@ -256,6 +257,8 @@ describe('Uazapi WhatsApp Provider Client', () => {
       expect(fromMeEntries[0].changes[0].value.messages?.[0].from_me).toBe(true);
       expect(fromMeEntries[0].changes[0].value.messages?.[0].from).toBe('5511977776666');
       expect(fromMeEntries[0].changes[0].value.messages?.[0].text?.body).toBe('Enviada por mim');
+      // Crucial: contact name must NOT be senderName ("Nader El Khouri")!
+      expect(fromMeEntries[0].changes[0].value.contacts?.[0].profile.name).toBe('5511977776666');
     });
 
     it('normalizes Uazapi button/list interactive replies', () => {

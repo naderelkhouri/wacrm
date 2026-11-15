@@ -765,17 +765,20 @@ async function processMessage(
   accessToken: string,
   whatsappConfigId?: string
 ) {
+  const isFromMe = Boolean(message.from_me)
   const senderPhone = normalizePhone(message.from)
   const contactName = contact.profile.name
   const avatarUrl = (contact as { avatar_url?: string }).avatar_url || null
 
-  // Find or create contact
+  // Find or create contact. If the message was sent from our own phone (isFromMe),
+  // never overwrite existing contact's name, and prevent saving the sender's own name.
   const contactOutcome = await findOrCreateContact(
     accountId,
     configOwnerUserId,
     senderPhone,
     contactName,
-    avatarUrl
+    avatarUrl,
+    isFromMe
   )
   if (!contactOutcome) return
   const contactRecord = contactOutcome.contact
@@ -909,8 +912,6 @@ async function processMessage(
       return
     }
   }
-
-  const isFromMe = Boolean(message.from_me)
 
   const { error: msgError } = await supabaseAdmin().from('messages').insert({
     conversation_id: conversation.id,
@@ -1341,7 +1342,8 @@ async function findOrCreateContact(
   configOwnerUserId: string,
   phone: string,
   name: string,
-  avatarUrl?: string | null
+  avatarUrl?: string | null,
+  isFromMe: boolean = false
 ): Promise<ContactOutcome | null> {
   // Find an existing contact for this account by phone. The shared
   // helper pre-filters in SQL by the last-8-digit suffix (so we don't
@@ -1357,7 +1359,8 @@ async function findOrCreateContact(
 
   if (existingContact) {
     const updates: Record<string, unknown> = {}
-    if (name && name !== existingContact.name) {
+    // Do NOT overwrite an existing contact's name on outbound (fromMe) messages
+    if (!isFromMe && name && name !== existingContact.name) {
       updates.name = name
     }
     if (avatarUrl && avatarUrl !== existingContact.avatar_url) {
@@ -1373,6 +1376,10 @@ async function findOrCreateContact(
     return { contact: { ...existingContact, ...updates }, wasCreated: false }
   }
 
+  // Determine initial name for new contact: if outbound (fromMe) and name was not specifically provided,
+  // ensure we do not store sender's name. Default to phone number if fromMe.
+  const initialName = isFromMe ? (name && name !== phone ? name : phone) : (name || phone)
+
   // Create new contact. account_id is the tenancy column;
   // user_id is the NOT NULL FK audit column (no inbound message
   // has a single "user who created" it — we attribute to the
@@ -1383,7 +1390,7 @@ async function findOrCreateContact(
       account_id: accountId,
       user_id: configOwnerUserId,
       phone,
-      name: name || phone,
+      name: initialName,
       ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
     })
     .select()
