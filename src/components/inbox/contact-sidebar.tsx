@@ -16,10 +16,18 @@ import {
   Camera,
   RefreshCw,
   Loader2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { addContactTag, deleteContactTag } from "@/lib/contacts/tag-api";
 import { format } from "date-fns";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
@@ -38,6 +46,8 @@ export function ContactSidebar({ contact, className }: ContactSidebarProps) {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [notes, setNotes] = useState<ContactNote[]>([]);
   const [tags, setTags] = useState<(Tag & { contact_tag_id: string })[]>([]);
+  const [allAvailableTags, setAllAvailableTags] = useState<Tag[]>([]);
+  const [tagLoading, setTagLoading] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
   const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string | null>(contact?.avatar_url ?? null);
@@ -104,8 +114,8 @@ export function ContactSidebar({ contact, className }: ContactSidebarProps) {
 
     const supabase = createClient();
 
-    // Fetch deals, notes, and tags in parallel
-    const [dealsRes, notesRes, tagsRes] = await Promise.all([
+    // Fetch deals, notes, tags, and account's available tags in parallel
+    const [dealsRes, notesRes, tagsRes, allTagsRes] = await Promise.all([
       supabase
         .from("deals")
         .select("*, stage:pipeline_stages(*)")
@@ -120,10 +130,15 @@ export function ContactSidebar({ contact, className }: ContactSidebarProps) {
         .from("contact_tags")
         .select("id, tag_id, tags(*)")
         .eq("contact_id", contact.id),
+      supabase
+        .from("tags")
+        .select("*")
+        .order("name", { ascending: true }),
     ]);
 
     if (dealsRes.data) setDeals(dealsRes.data);
     if (notesRes.data) setNotes(notesRes.data);
+    if (allTagsRes.data) setAllAvailableTags(allTagsRes.data);
     if (tagsRes.data) {
       const mapped = tagsRes.data
         .filter((ct: Record<string, unknown>) => ct.tags)
@@ -134,6 +149,40 @@ export function ContactSidebar({ contact, className }: ContactSidebarProps) {
       setTags(mapped);
     }
   }, [contact]);
+
+  const handleAddTag = useCallback(
+    async (tagId: string) => {
+      if (!contact || tagLoading) return;
+      setTagLoading(true);
+      try {
+        await addContactTag(contact.id, tagId);
+        toast.success("Tag adicionada com sucesso!");
+        await fetchContactData();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Erro ao adicionar tag.");
+      } finally {
+        setTagLoading(false);
+      }
+    },
+    [contact, tagLoading, fetchContactData]
+  );
+
+  const handleRemoveTag = useCallback(
+    async (tagId: string) => {
+      if (!contact || tagLoading) return;
+      setTagLoading(true);
+      try {
+        await deleteContactTag(contact.id, tagId);
+        toast.success("Tag removida.");
+        await fetchContactData();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Erro ao remover tag.");
+      } finally {
+        setTagLoading(false);
+      }
+    },
+    [contact, tagLoading, fetchContactData]
+  );
 
   // Load on contact change. setContactData/setTags run inside async
   // Supabase callbacks, not synchronously in the effect body.
@@ -278,9 +327,54 @@ export function ContactSidebar({ contact, className }: ContactSidebarProps) {
 
           {/* Tags */}
           <div>
-            <div className="flex items-center gap-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              <TagIcon className="h-3 w-3" />
-              {tSidebar("tags")}
+            <div className="flex items-center justify-between px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <TagIcon className="h-3 w-3" />
+                {tSidebar("tags")}
+              </div>
+              {contact && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    disabled={tagLoading}
+                    className="inline-flex items-center gap-1 rounded p-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    title="Adicionar tag"
+                  >
+                    {tagLoading ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Plus className="h-3 w-3" />
+                    )}
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48 max-h-56 overflow-y-auto">
+                    {allAvailableTags.length === 0 ? (
+                      <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                        Nenhuma tag criada
+                      </div>
+                    ) : (
+                      allAvailableTags.map((at) => {
+                        const isAssigned = tags.some((t) => t.id === at.id);
+                        return (
+                          <DropdownMenuItem
+                            key={at.id}
+                            disabled={isAssigned || tagLoading}
+                            onClick={() => void handleAddTag(at.id)}
+                            className="flex items-center justify-between text-xs cursor-pointer"
+                          >
+                            <span className="flex items-center gap-1.5 truncate">
+                              <span
+                                className="h-2 w-2 rounded-full shrink-0"
+                                style={{ backgroundColor: at.color }}
+                              />
+                              <span className="truncate">{at.name}</span>
+                            </span>
+                            {isAssigned && <Check className="h-3 w-3 text-muted-foreground shrink-0" />}
+                          </DropdownMenuItem>
+                        );
+                      })
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
             <div className="mt-2 flex flex-wrap gap-1">
               {tags.length === 0 ? (
@@ -289,13 +383,22 @@ export function ContactSidebar({ contact, className }: ContactSidebarProps) {
                 tags.map((tag) => (
                   <span
                     key={tag.contact_tag_id}
-                    className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                    className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium transition-all group"
                     style={{
                       backgroundColor: `${tag.color}20`,
                       color: tag.color,
                     }}
                   >
-                    {tag.name}
+                    <span>{tag.name}</span>
+                    <button
+                      type="button"
+                      disabled={tagLoading}
+                      onClick={() => void handleRemoveTag(tag.id)}
+                      className="hover:opacity-80 rounded-full focus:outline-none"
+                      title="Remover tag"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
                   </span>
                 ))
               )}
