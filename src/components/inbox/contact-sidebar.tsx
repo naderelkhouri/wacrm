@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { addContactTag, deleteContactTag } from "@/lib/contacts/tag-api";
+import { QuickDealDialog } from "./quick-deal-dialog";
 import { format } from "date-fns";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
@@ -48,6 +49,7 @@ export function ContactSidebar({ contact, className }: ContactSidebarProps) {
   const [tags, setTags] = useState<(Tag & { contact_tag_id: string })[]>([]);
   const [allAvailableTags, setAllAvailableTags] = useState<Tag[]>([]);
   const [tagLoading, setTagLoading] = useState(false);
+  const [dealDialogOpen, setDealDialogOpen] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
   const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string | null>(contact?.avatar_url ?? null);
@@ -410,9 +412,21 @@ export function ContactSidebar({ contact, className }: ContactSidebarProps) {
 
           {/* Active Deals */}
           <div>
-            <div className="flex items-center gap-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              <DollarSign className="h-3 w-3" />
-              {tSidebar("deals")}
+            <div className="flex items-center justify-between px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-3 w-3" />
+                {tSidebar("deals")}
+              </div>
+              {contact && (
+                <button
+                  type="button"
+                  onClick={() => setDealDialogOpen(true)}
+                  className="inline-flex items-center gap-1 rounded p-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  title="Novo Negócio"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              )}
             </div>
             <div className="mt-2 space-y-2">
               {deals.length === 0 ? (
@@ -496,6 +510,15 @@ export function ContactSidebar({ contact, className }: ContactSidebarProps) {
           </div>
         </div>
       </ScrollArea>
+
+      {contact && (
+        <QuickDealDialog
+          open={dealDialogOpen}
+          onOpenChange={setDealDialogOpen}
+          contact={contact}
+          onCreated={() => void fetchContactData()}
+        />
+      )}
     </div>
   );
 }
