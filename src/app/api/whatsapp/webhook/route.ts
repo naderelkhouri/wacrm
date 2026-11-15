@@ -15,6 +15,7 @@ import {
 } from '@/lib/whatsapp/template-webhook'
 import { classifyConversationUrgency } from '@/lib/ai/auto-triage'
 import { transcribeAudioAttachment } from '@/lib/ai/audio-transcribe'
+import { autoSyncContactAvatar } from '@/lib/contacts/auto-sync-avatar'
 import { BusinessHoursScheduler, type BusinessHoursConfig } from '@/lib/chatwoot/business-hours'
 import { engineSendText } from '@/lib/flows/meta-send'
 import {
@@ -778,6 +779,18 @@ async function processMessage(
   )
   if (!contactOutcome) return
   const contactRecord = contactOutcome.contact
+
+  // Auto-sync WhatsApp profile picture in background if contact has none
+  if (!contactRecord.avatar_url) {
+    autoSyncContactAvatar({
+      db: supabaseAdmin(),
+      accountId,
+      contactId: contactRecord.id,
+      phone: contactRecord.phone,
+      currentAvatarUrl: contactRecord.avatar_url,
+      configId: whatsappConfigId,
+    }).catch((err) => console.warn('[webhook] autoSyncContactAvatar error:', err))
+  }
 
   // Find or create conversation
   const convResult = await findOrCreateConversation(
