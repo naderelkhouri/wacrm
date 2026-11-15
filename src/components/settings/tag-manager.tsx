@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Plus, Tag as TagIcon, X } from 'lucide-react';
+import { Loader2, Plus, Tag as TagIcon, X, Pencil } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
@@ -51,6 +51,11 @@ export function TagManager() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [tagToDelete, setTagToDelete] = useState<Tag | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [tagToEdit, setTagToEdit] = useState<Tag | null>(null);
+  const [editTagName, setEditTagName] = useState('');
+  const [editTagColor, setEditTagColor] = useState(PRESET_COLORS[3].value);
+  const [updating, setUpdating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [newTagName, setNewTagName] = useState('');
@@ -58,22 +63,22 @@ export function TagManager() {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user) {
+    if (!accountId) {
       setLoading(false);
       return;
     }
-    fetchTags(user.id);
+    fetchTags(accountId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, user?.id]);
+  }, [authLoading, accountId]);
 
-  async function fetchTags(userId: string) {
+  async function fetchTags(accId: string) {
     try {
       setLoading(true);
       const { data, error } = await supabase
         .from('tags')
         .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: true });
+        .eq('account_id', accId)
+        .order('name', { ascending: true });
 
       if (error) throw error;
       setTags(data || []);
@@ -112,12 +117,47 @@ export function TagManager() {
       toast.success(t('tagCreated'));
       setNewTagName('');
       setSelectedColor(PRESET_COLORS[3].value);
-      await fetchTags(user.id);
+      await fetchTags(accountId);
     } catch (err) {
       console.error('Create error:', err);
       toast.error(t('failedToCreateTag'));
     } finally {
       setSaving(false);
+    }
+  }
+
+  function openEdit(tag: Tag) {
+    setTagToEdit(tag);
+    setEditTagName(tag.name);
+    setEditTagColor(tag.color || PRESET_COLORS[3].value);
+    setEditDialogOpen(true);
+  }
+
+  async function handleUpdate() {
+    if (!tagToEdit || !editTagName.trim() || !accountId) return;
+
+    try {
+      setUpdating(true);
+      const { error } = await supabase
+        .from('tags')
+        .update({
+          name: editTagName.trim(),
+          color: editTagColor,
+        })
+        .eq('id', tagToEdit.id)
+        .eq('account_id', accountId);
+
+      if (error) throw error;
+
+      toast.success('Etiqueta atualizada com sucesso!');
+      setEditDialogOpen(false);
+      setTagToEdit(null);
+      await fetchTags(accountId);
+    } catch (err) {
+      console.error('Update tag error:', err);
+      toast.error('Falha ao atualizar etiqueta.');
+    } finally {
+      setUpdating(false);
     }
   }
 
@@ -187,9 +227,19 @@ export function TagManager() {
                     {tag.name}
                     <button
                       type="button"
+                      onClick={() => openEdit(tag)}
+                      aria-label={`Editar ${tag.name}`}
+                      className="ml-0.5 rounded-full p-0.5 opacity-60 transition-opacity hover:bg-black/10 hover:opacity-100 dark:hover:bg-white/10"
+                      title="Editar etiqueta"
+                    >
+                      <Pencil className="size-3" />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => confirmDelete(tag)}
                       aria-label={t('deleteAria', { name: tag.name })}
-                      className="ml-0.5 rounded-full p-0.5 opacity-60 transition-opacity hover:bg-black/10 hover:opacity-100 dark:hover:bg-white/10"
+                      className="rounded-full p-0.5 opacity-60 transition-opacity hover:bg-black/10 hover:opacity-100 dark:hover:bg-white/10"
+                      title="Excluir etiqueta"
                     >
                       <X className="size-3" />
                     </button>
@@ -250,6 +300,71 @@ export function TagManager() {
           </>
         )}
       </CardContent>
+
+      {/* Edit tag dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Editar Etiqueta</DialogTitle>
+            <DialogDescription>
+              Altere o nome e a cor da etiqueta. As alterações refletirão em todos os contatos.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Nome da etiqueta</label>
+              <Input
+                placeholder="Nome da etiqueta"
+                value={editTagName}
+                onChange={(e) => setEditTagName(e.target.value)}
+                maxLength={40}
+                disabled={updating}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Cor da etiqueta</label>
+              <div className="flex gap-2">
+                {PRESET_COLORS.map((color) => (
+                  <button
+                    key={color.value}
+                    type="button"
+                    onClick={() => setEditTagColor(color.value)}
+                    className={cn(
+                      'size-6 rounded-md transition-transform hover:scale-110',
+                      editTagColor === color.value &&
+                        'outline outline-2 outline-offset-2 outline-primary'
+                    )}
+                    style={{ backgroundColor: color.value }}
+                    title={color.name}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setEditDialogOpen(false)}
+              disabled={updating}
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              onClick={handleUpdate}
+              disabled={updating || !editTagName.trim()}
+            >
+              {updating ? (
+                <>
+                  <Loader2 className="size-4 animate-spin mr-2" />
+                  Salvando...
+                </>
+              ) : (
+                'Salvar Alterações'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete confirmation */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
