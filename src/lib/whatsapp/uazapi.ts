@@ -483,6 +483,55 @@ export async function sendUazapiMediaMessage(params: {
 }
 
 /**
+ * Downloads and decrypts media from Uazapi (`POST /message/download`).
+ * Returns direct public fileURL and mimetype (e.g. .mp3, .jpg, .pdf).
+ */
+export async function downloadUazapiMedia(params: {
+  apiUrl: string;
+  instanceToken: string;
+  messageId: string;
+}): Promise<{ fileURL: string | null; mimetype: string | null; transcription?: string | null }> {
+  const baseUrl = normalizeUazapiBaseUrl(params.apiUrl);
+  const headers = buildUazapiHeaders(params.instanceToken);
+
+  try {
+    const res = await fetch(`${baseUrl}/message/download`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ id: params.messageId }),
+      signal: AbortSignal.timeout(UAZAPI_TIMEOUT_MS),
+    });
+
+    if (!res.ok) {
+      // Retry with messageId key if id is not accepted
+      const fallbackRes = await fetch(`${baseUrl}/message/download`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ messageId: params.messageId }),
+        signal: AbortSignal.timeout(UAZAPI_TIMEOUT_MS),
+      });
+      if (!fallbackRes.ok) return { fileURL: null, mimetype: null };
+      const fallbackData = (await fallbackRes.json().catch(() => ({}))) as Record<string, unknown>;
+      return {
+        fileURL: typeof fallbackData.fileURL === 'string' ? fallbackData.fileURL : null,
+        mimetype: typeof fallbackData.mimetype === 'string' ? fallbackData.mimetype : null,
+        transcription: typeof fallbackData.transcription === 'string' ? fallbackData.transcription : null,
+      };
+    }
+
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    return {
+      fileURL: typeof data.fileURL === 'string' ? data.fileURL : null,
+      mimetype: typeof data.mimetype === 'string' ? data.mimetype : null,
+      transcription: typeof data.transcription === 'string' ? data.transcription : null,
+    };
+  } catch (err) {
+    console.warn(`[uazapi] downloadUazapiMedia failed for ${params.messageId}:`, err);
+    return { fileURL: null, mimetype: null };
+  }
+}
+
+/**
  * Sends an interactive button message via Uazapi (`POST /send/menu`),
  * falling back to a clean formatted text message if the endpoint or client
  * does not support native interactive menus.

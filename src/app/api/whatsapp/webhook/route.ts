@@ -22,6 +22,7 @@ import {
   isUazapiWebhookPayload,
   extractUazapiWebhookToken,
   parseUazapiWebhookToMetaEntries,
+  downloadUazapiMedia,
 } from '@/lib/whatsapp/uazapi'
 import { recordTelemetryEvent } from '@/lib/telemetry/telemetry-service'
 
@@ -473,7 +474,9 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
           // the admin who saved the WhatsApp config.
           config.user_id,
           decryptedAccessToken,
-          config.id
+          config.id,
+          config.provider,
+          config.api_url
         )
       }
 
@@ -763,7 +766,9 @@ async function processMessage(
   // WhatsApp config; the choice is arbitrary post-017 but stable.
   configOwnerUserId: string,
   accessToken: string,
-  whatsappConfigId?: string
+  whatsappConfigId?: string,
+  provider?: string,
+  apiUrl?: string | null
 ) {
   const isFromMe = Boolean(message.from_me)
   const senderPhone = normalizePhone(message.from)
@@ -826,7 +831,7 @@ async function processMessage(
 
   // Parse message content based on type
   const { contentText: parsedText, mediaUrl, mediaType, interactiveReplyId } =
-    await parseMessageContent(message, accessToken)
+    await parseMessageContent(message, accessToken, provider, apiUrl)
   let contentText = parsedText
 
   // If inbound message is audio, attempt automatic speech-to-text transcription
@@ -1180,7 +1185,9 @@ async function processMessage(
 
 async function parseMessageContent(
   message: WhatsAppMessage,
-  accessToken: string
+  accessToken: string,
+  provider?: string,
+  apiUrl?: string | null
 ): Promise<{
   contentText: string | null
   mediaUrl: string | null
@@ -1194,10 +1201,8 @@ async function parseMessageContent(
    */
   interactiveReplyId: string | null
 }> {
-  // getMediaUrl signature is (mediaId, accessToken) — earlier code had
-  // the args swapped, so every verification hit an invalid Meta URL and
-  // fell through to the catch block, leaving mediaUrl as null. That's
-  // why images showed up as empty bubbles in the inbox.
+  const isUazapi = provider === 'uazapi' && Boolean(apiUrl);
+
   const verifyAndBuildUrl = async (
     mediaId: string
   ): Promise<string | null> => {
@@ -1205,6 +1210,20 @@ async function parseMessageContent(
     if (/^https?:\/\//i.test(mediaId)) {
       return mediaId
     }
+
+    // Uazapi unofficial integration: fetch decrypted public file URL
+    if (isUazapi && apiUrl) {
+      const uazRes = await downloadUazapiMedia({
+        apiUrl,
+        instanceToken: accessToken,
+        messageId: message.id || mediaId,
+      });
+      if (uazRes.fileURL) {
+        return uazRes.fileURL;
+      }
+    }
+
+    // Official Meta API verification
     try {
       await getMediaUrl({ mediaId, accessToken })
       return `/api/whatsapp/media/${mediaId}`
