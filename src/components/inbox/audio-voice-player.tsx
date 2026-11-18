@@ -1,15 +1,17 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Play, Pause } from "lucide-react";
+import { Play, Pause, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AudioVoicePlayerProps {
   src: string;
   isFromMe?: boolean;
+  avatarUrl?: string | null;
+  name?: string;
 }
 
-export function AudioVoicePlayer({ src, isFromMe = false }: AudioVoicePlayerProps) {
+export function AudioVoicePlayer({ src, isFromMe = false, avatarUrl, name }: AudioVoicePlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -109,82 +111,106 @@ export function AudioVoicePlayer({ src, isFromMe = false }: AudioVoicePlayerProp
   ];
 
   return (
-    <div className="flex flex-col gap-1.5 py-1 min-w-[210px] sm:min-w-[240px]">
+    <div className="flex items-center gap-3 py-1 min-w-[240px] sm:min-w-[280px]">
       <audio ref={audioRef} src={src} preload="metadata" />
 
-      <div className="flex items-center gap-2.5">
-        {/* Play/Pause Button */}
-        <button
-          type="button"
-          onClick={togglePlay}
-          className={cn(
-            "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            isFromMe
-              ? "bg-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/30"
-              : "bg-primary text-primary-foreground hover:opacity-90"
-          )}
-          aria-label={isPlaying ? "Pausar áudio" : "Tocar áudio"}
-        >
-          {isPlaying ? (
-            <Pause className="h-4 w-4 fill-current" />
+      {/* WhatsApp PTT Mic Badge / Avatar on Left */}
+      <div className="relative shrink-0">
+        <div className="h-10 w-10 rounded-full overflow-hidden bg-muted flex items-center justify-center border border-border/40">
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt={name || "Avatar"} className="h-full w-full object-cover" />
           ) : (
-            <Play className="h-4 w-4 fill-current translate-x-0.5" />
+            <span className="text-xs font-semibold uppercase text-muted-foreground">
+              {name ? name.charAt(0) : "W"}
+            </span>
           )}
-        </button>
-
-        {/* Waveform track */}
-        <div
-          role="slider"
-          tabIndex={0}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(progressPercent)}
-          onClick={handleSeek}
-          className="relative flex flex-1 items-center gap-[2.5px] h-7 cursor-pointer group select-none px-1"
-        >
-          {BAR_HEIGHTS.slice(0, BARS_COUNT).map((height, i) => {
-            const barPercent = (i / (BARS_COUNT - 1)) * 100;
-            const isPlayed = barPercent <= progressPercent;
-
-            return (
-              <span
-                key={i}
-                style={{ height: `${height}%` }}
-                className={cn(
-                  "w-[3px] rounded-full transition-colors",
-                  isPlayed
-                    ? isFromMe
-                      ? "bg-primary-foreground"
-                      : "bg-primary"
-                    : isFromMe
-                      ? "bg-primary-foreground/40"
-                      : "bg-muted-foreground/30 group-hover:bg-muted-foreground/40"
-                )}
-              />
-            );
-          })}
         </div>
-
-        {/* Speed multiplier pill */}
-        <button
-          type="button"
-          onClick={cycleSpeed}
+        <div
           className={cn(
-            "shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold tracking-tight transition-colors",
-            isFromMe
-              ? "bg-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/30"
-              : "bg-muted text-muted-foreground hover:text-foreground"
+            "absolute -bottom-1 -right-1 h-4 w-4 rounded-full flex items-center justify-center text-white shadow-sm",
+            isFromMe ? "bg-emerald-500" : "bg-[#53bdeb]"
           )}
-          title="Velocidade de reprodução"
         >
-          {SPEEDS[speedIndex]}x
-        </button>
+          <Mic className="h-2.5 w-2.5" />
+        </div>
       </div>
 
-      {/* Time indicators */}
-      <div className="flex items-center justify-between px-1 text-[10px] text-muted-foreground/80 font-medium">
-        <span>{formatTime(currentTime)}</span>
-        <span>{duration > 0 ? formatTime(duration) : "--:--"}</span>
+      <div className="flex-1 flex flex-col gap-1 min-w-0">
+        <div className="flex items-center gap-2">
+          {/* Play/Pause Button */}
+          <button
+            type="button"
+            onClick={togglePlay}
+            className={cn(
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all focus:outline-none",
+              isFromMe
+                ? "text-foreground hover:bg-black/10 dark:hover:bg-white/10"
+                : "text-foreground hover:bg-black/10 dark:hover:bg-white/10"
+            )}
+            aria-label={isPlaying ? "Pausar áudio" : "Tocar áudio"}
+          >
+            {isPlaying ? (
+              <Pause className="h-4 w-4 fill-current" />
+            ) : (
+              <Play className="h-4 w-4 fill-current translate-x-0.5" />
+            )}
+          </button>
+
+          {/* Waveform track */}
+          <div
+            role="slider"
+            tabIndex={0}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progressPercent)}
+            onClick={handleSeek}
+            className="relative flex flex-1 items-center gap-[2.5px] h-7 cursor-pointer group select-none px-1"
+          >
+            {BAR_HEIGHTS.slice(0, BARS_COUNT).map((height, i) => {
+              const barPercent = (i / (BARS_COUNT - 1)) * 100;
+              const isPlayed = barPercent <= progressPercent;
+
+              return (
+                <span
+                  key={i}
+                  style={{ height: `${height}%` }}
+                  className={cn(
+                    "w-[3px] rounded-full transition-colors",
+                    isPlayed
+                      ? isFromMe
+                        ? "bg-[#53bdeb]"
+                        : "bg-[#53bdeb]"
+                      : isFromMe
+                        ? "bg-foreground/30"
+                        : "bg-muted-foreground/40 group-hover:bg-muted-foreground/60"
+                  )}
+                />
+              );
+            })}
+          </div>
+
+          {/* Speed multiplier pill */}
+          <button
+            type="button"
+            onClick={cycleSpeed}
+            className={cn(
+              "shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold tracking-tight transition-colors border",
+              isFromMe
+                ? "bg-black/10 dark:bg-white/10 border-border/40 text-foreground"
+                : "bg-muted border-border text-foreground hover:bg-muted/80"
+            )}
+            title="Velocidade de reprodução"
+          >
+            {SPEEDS[speedIndex]}x
+          </button>
+        </div>
+
+        {/* Time indicator */}
+        <div className="flex items-center justify-between px-1 text-[10px] text-muted-foreground font-medium">
+          <span>{formatTime(currentTime)}</span>
+          <span>{duration > 0 ? formatTime(duration) : "--:--"}</span>
+        </div>
       </div>
     </div>
   );

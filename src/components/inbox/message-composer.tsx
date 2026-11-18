@@ -61,6 +61,10 @@ import {
   getAgencySpecialist,
 } from "@/lib/ai/agency-specialists";
 import {
+  WhatsAppEmojiGifPicker,
+  type CuratedGif,
+} from "./whatsapp-emoji-gif-picker";
+import {
   buildMessageVariables,
   getUndefinedVariablesInMessage,
   replaceVariablesInMessage,
@@ -461,6 +465,30 @@ export function MessageComposer({
     [stageUpload],
   );
 
+  const handleSelectEmoji = useCallback((emoji: string) => {
+    setText((prev) => `${prev}${emoji}`);
+    requestAnimationFrame(() => {
+      adjustHeight();
+      const el = textareaRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      }
+    });
+  }, [adjustHeight]);
+
+  const handleSelectGif = useCallback((gif: CuratedGif) => {
+    // Stage GIF as an image attachment so the agent can preview, add a caption, and send!
+    removeStaged(draftRef.current?.path);
+    setDraft({
+      kind: "image",
+      mediaUrl: gif.url,
+      path: "",
+      filename: `${gif.id}.gif`,
+      caption: "",
+    });
+  }, [removeStaged]);
+
   // ---- Voice recording (client-side Ogg/Opus, no server transcode) ---
 
   // The encoded Ogg/Opus file from opus-recorder → upload as an audio
@@ -673,6 +701,13 @@ export function MessageComposer({
         </div>
       ) : (
         <div className="flex items-end gap-2">
+          {/* Emoji & GIF Picker (Identical to WhatsApp) */}
+          <WhatsAppEmojiGifPicker
+            onSelectEmoji={handleSelectEmoji}
+            onSelectGif={handleSelectGif}
+            disabled={inputsDisabled || busy}
+          />
+
           {/* Attach menu — photo / video / document / voice. */}
           <DropdownMenu>
             <DropdownMenuTrigger

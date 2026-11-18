@@ -228,3 +228,25 @@ html[data-theme="rose"] {
     @apply font-sans;
   }
 }
+
+/* WhatsApp Bubble Custom Colors & Styles */
+:root,
+html[data-mode="dark"] {
+  --wa-bubble-out: #005c4b;
+  --wa-bubble-out-text: #e9edef;
+  --wa-bubble-in: #202c33;
+  --wa-bubble-in-text: #e9edef;
+  --wa-time-out: rgba(233, 237, 239, 0.6);
+  --wa-time-in: #8696a0;
+  --wa-check-read: #53bdeb;
+}
+
+html[data-mode="light"] {
+  --wa-bubble-out: #d9fdd3;
+  --wa-bubble-out-text: #111b21;
+  --wa-bubble-in: #ffffff;
+  --wa-bubble-in-text: #111b21;
+  --wa-time-out: #667781;
+  --wa-time-in: #667781;
+  --wa-check-read: #53bdeb;
+}

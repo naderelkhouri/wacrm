@@ -1312,6 +1312,8 @@ export function MessageThread({
                           reactions={msgReactions}
                           currentUserId={user?.id}
                           onToggleReaction={handlePillToggle}
+                          contactAvatarUrl={contact?.avatar_url}
+                          contactName={contact?.name || contact?.phone}
                         />
                       </MessageActions>
                     );

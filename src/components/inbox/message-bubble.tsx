@@ -9,6 +9,10 @@ import {
   CheckCheck,
   XCircle,
   FileText,
+  FileSpreadsheet,
+  FileCode,
+  FileArchive,
+  Download,
   MapPin,
   LayoutTemplate,
   ImageOff,
@@ -29,20 +33,22 @@ interface MessageBubbleProps {
   reactions?: MessageReaction[];
   currentUserId?: string;
   onToggleReaction?: (emoji: string) => void;
+  contactAvatarUrl?: string | null;
+  contactName?: string;
 }
 
 function StatusIcon({ status }: { status: Message["status"] }) {
   switch (status) {
     case "sending":
-      return <Clock className="h-3 w-3 text-muted-foreground" />;
+      return <Clock className="h-3.5 w-3.5 text-[var(--wa-time-out)] opacity-70" />;
     case "sent":
-      return <Check className="h-3 w-3 text-muted-foreground" />;
+      return <Check className="h-3.5 w-3.5 text-[var(--wa-time-out)]" />;
     case "delivered":
-      return <CheckCheck className="h-3 w-3 text-muted-foreground" />;
+      return <CheckCheck className="h-3.5 w-3.5 text-[var(--wa-time-out)]" />;
     case "read":
-      return <CheckCheck className="h-3 w-3 text-blue-400" />;
+      return <CheckCheck className="h-3.5 w-3.5 text-[var(--wa-check-read)]" />;
     case "failed":
-      return <XCircle className="h-3 w-3 text-red-400" />;
+      return <XCircle className="h-3.5 w-3.5 text-red-400" />;
     default:
       return null;
   }
@@ -125,15 +131,19 @@ function MessageContent({
   message,
   t,
   isFromMe,
+  contactAvatarUrl,
+  contactName,
 }: {
   message: Message;
   t: ReturnType<typeof useTranslations>;
   isFromMe: boolean;
+  contactAvatarUrl?: string | null;
+  contactName?: string;
 }) {
   switch (message.content_type) {
     case "text":
       return (
-        <p className="whitespace-pre-wrap break-words text-sm">
+        <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
           {message.content_text}
         </p>
       );
@@ -147,7 +157,7 @@ function MessageContent({
             <MediaUnavailable label={t("photo")} t={t} />
           )}
           {message.content_text && (
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">
               {message.content_text}
             </p>
           )}
@@ -167,7 +177,7 @@ function MessageContent({
             <MediaUnavailable label={t("video")} t={t} />
           )}
           {message.content_text && (
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">
               {message.content_text}
             </p>
           )}
@@ -178,35 +188,75 @@ function MessageContent({
       return (
         <div>
           {message.media_url ? (
-            <AudioVoicePlayer src={message.media_url} isFromMe={isFromMe} />
+            <AudioVoicePlayer
+              src={message.media_url}
+              isFromMe={isFromMe}
+              avatarUrl={isFromMe ? null : contactAvatarUrl}
+              name={isFromMe ? "Eu" : contactName}
+            />
           ) : (
             <MediaUnavailable label={t("audio")} t={t} />
           )}
           {message.content_text && (
-            <p className="mt-1 text-xs text-muted-foreground/90 italic bg-muted/40 rounded px-2 py-1 border border-border/50">
+            <p className="mt-1 text-xs text-muted-foreground/90 italic bg-black/10 dark:bg-white/10 rounded px-2 py-1">
               {message.content_text}
             </p>
           )}
         </div>
       );
 
-    case "document":
+    case "document": {
       if (!message.media_url) {
         return <MediaUnavailable label={message.content_text || t("document")} t={t} />;
       }
+
+      const fileName = message.content_text || "document";
+      const ext = fileName.includes(".")
+        ? fileName.split(".").pop()?.toUpperCase() || "DOC"
+        : "DOC";
+
+      // Icon & color badge depending on file extension
+      let docBadgeColor = "bg-slate-500/20 text-slate-500";
+      let DocIcon = FileText;
+
+      if (["PDF"].includes(ext)) {
+        docBadgeColor = "bg-red-500/15 text-red-500";
+        DocIcon = FileText;
+      } else if (["XLS", "XLSX", "CSV"].includes(ext)) {
+        docBadgeColor = "bg-emerald-500/15 text-emerald-600";
+        DocIcon = FileSpreadsheet;
+      } else if (["ZIP", "RAR", "TAR", "7Z"].includes(ext)) {
+        docBadgeColor = "bg-amber-500/15 text-amber-600";
+        DocIcon = FileArchive;
+      } else if (["JSON", "JS", "TS", "HTML", "CSS", "PY"].includes(ext)) {
+        docBadgeColor = "bg-blue-500/15 text-blue-500";
+        DocIcon = FileCode;
+      }
+
       return (
         <a
           href={message.media_url}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm hover:bg-muted"
+          className="flex items-center gap-3 rounded-xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 p-3 hover:bg-black/10 dark:hover:bg-white/10 transition-colors group/doc min-w-[220px] max-w-[320px]"
         >
-          <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
-          <span className="truncate">
-            {message.content_text || t("document")}
-          </span>
+          <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-lg font-bold text-xs uppercase", docBadgeColor)}>
+            <DocIcon className="h-6 w-6" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="truncate text-sm font-medium leading-tight">
+              {fileName}
+            </p>
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+              {ext}
+            </span>
+          </div>
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/5 dark:bg-white/10 text-muted-foreground group-hover/doc:text-foreground transition-colors">
+            <Download className="h-4 w-4" />
+          </div>
         </a>
       );
+    }
 
     case "template":
       return (
@@ -279,29 +329,56 @@ export function MessageBubble({
   reactions,
   currentUserId,
   onToggleReaction,
+  contactAvatarUrl,
+  contactName,
 }: MessageBubbleProps) {
   const t = useTranslations("Inbox.bubble");
 
   const isAgent = message.sender_type === "agent" || message.sender_type === "bot";
   const time = format(new Date(message.created_at), "HH:mm");
 
-  // Row alignment + width cap are owned by <MessageActions> so its hover
-  // group matches the bubble's content area, not the full row.
   return (
     <div
       className={cn(
-        "flex flex-col",
+        "flex flex-col relative",
         isAgent ? "items-end" : "items-start",
       )}
     >
       <div
         className={cn(
-          "relative rounded-2xl px-3 py-2",
+          "relative rounded-lg px-3 py-1.5 shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] max-w-full group/bubble transition-shadow",
           isAgent
-            ? "rounded-br-md bg-primary text-primary-foreground"
-            : "rounded-bl-md bg-muted text-foreground",
+            ? "rounded-tr-none bg-[var(--wa-bubble-out)] text-[var(--wa-bubble-out-text)]"
+            : "rounded-tl-none bg-[var(--wa-bubble-in)] text-[var(--wa-bubble-in-text)]",
         )}
       >
+        {/* Authentic WhatsApp Bubble Corner Tail SVG */}
+        {isAgent ? (
+          <span className="absolute -top-[0px] -right-[8px] w-2.5 h-3 overflow-hidden pointer-events-none">
+            <svg
+              viewBox="0 0 8 13"
+              height="13"
+              width="8"
+              preserveAspectRatio="xMidYMid meet"
+              className="fill-[var(--wa-bubble-out)]"
+            >
+              <path d="M5.188 1H0v11.193l6.467-8.625C7.526 2.156 6.958 1 5.188 1z" />
+            </svg>
+          </span>
+        ) : (
+          <span className="absolute -top-[0px] -left-[8px] w-2.5 h-3 overflow-hidden pointer-events-none">
+            <svg
+              viewBox="0 0 8 13"
+              height="13"
+              width="8"
+              preserveAspectRatio="xMidYMid meet"
+              className="fill-[var(--wa-bubble-in)]"
+            >
+              <path d="M1.533 3.568L8 12.193V1H2.812C1.042 1 .474 2.156 1.533 3.568z" />
+            </svg>
+          </span>
+        )}
+
         {reply && (
           <ReplyQuote
             authorLabel={reply.authorLabel}
@@ -309,20 +386,26 @@ export function MessageBubble({
             onPrimary={isAgent}
           />
         )}
-        <MessageContent message={message} t={t} isFromMe={isAgent} />
+
+        <div className="min-w-0">
+          <MessageContent
+            message={message}
+            t={t}
+            isFromMe={isAgent}
+            contactAvatarUrl={contactAvatarUrl}
+            contactName={contactName}
+          />
+        </div>
+
+        {/* Floating Bottom-Right Timestamp & Status Checks */}
         <div
           className={cn(
-            "mt-1 flex items-center gap-1",
-            isAgent ? "justify-end" : "justify-start",
+            "mt-1 flex items-center justify-end gap-1 select-none pointer-events-none float-right -mb-0.5 ml-3",
           )}
         >
-          {/* AI badge — only on replies the auto-reply bot generated
-              (always outbound, so it sits on the primary fill). Lets
-              agents tell an AI reply from their own / a Flow's at a
-              glance. */}
           {message.ai_generated && (
             <span
-              className="inline-flex items-center gap-0.5 rounded-full bg-primary-foreground/20 px-1.5 py-px text-[9px] font-semibold uppercase leading-none tracking-wide text-primary-foreground"
+              className="inline-flex items-center gap-0.5 rounded-full bg-black/10 dark:bg-white/10 px-1.5 py-px text-[9px] font-semibold uppercase leading-none tracking-wide text-primary"
               title={t("aiBadgeTitle")}
             >
               <Sparkles className="h-2.5 w-2.5" />
@@ -331,12 +414,8 @@ export function MessageBubble({
           )}
           <span
             className={cn(
-              "text-[10px]",
-              // Outbound bubbles sit on the primary fill, so the
-              // timestamp must read against that (not the neutral
-              // foreground) — otherwise it goes low-contrast in light
-              // mode. Inbound bubbles use the muted surface.
-              isAgent ? "text-primary-foreground/70" : "text-muted-foreground",
+              "text-[11px] leading-none tracking-tight font-normal",
+              isAgent ? "text-[var(--wa-time-out)]" : "text-[var(--wa-time-in)]",
             )}
           >
             {time}
@@ -344,6 +423,7 @@ export function MessageBubble({
           {isAgent && <StatusIcon status={message.status} />}
         </div>
       </div>
+
       {reactions && reactions.length > 0 && onToggleReaction && (
         <MessageReactions
           reactions={reactions}
