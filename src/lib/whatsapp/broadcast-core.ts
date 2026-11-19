@@ -67,6 +67,7 @@ interface PlannedRecipient {
 
 export interface BroadcastPlan {
   broadcastId: string;
+  whatsappConfigId?: string | null;
   templateName: string;
   templateLanguage: string;
   provider?: 'meta' | 'uazapi';
@@ -128,6 +129,29 @@ export async function createBroadcast(
     );
   }
   const accessToken = decrypt(config.access_token);
+
+  // Trava de segurança anti-ban: verifica cota diária do motor de aquecimento
+  if (config.id && config.id !== 'global') {
+    const { data: configRow } = await db
+      .from('whatsapp_config')
+      .select('warmup_enabled, daily_message_limit, messages_sent_today')
+      .eq('id', config.id)
+      .maybeSingle();
+
+    if (configRow?.warmup_enabled) {
+      const remainingQuota = Math.max(
+        0,
+        (configRow.daily_message_limit || 30) - (configRow.messages_sent_today || 0)
+      );
+      if (recipients.length > remainingQuota) {
+        throw new BroadcastError(
+          'warmup_limit_exceeded',
+          `Limite de aquecimento excedido: este envio tem ${recipients.length} destinatários, mas a instância só pode enviar mais ${remainingQuota} mensagens hoje para evitar banimentos (limite diário: ${configRow.daily_message_limit}).`,
+          400
+        );
+      }
+    }
+  }
 
   // Template row (once) for header/button components; guard a
   // malformed local row rather than N identical opaque failures.
@@ -240,6 +264,7 @@ export async function createBroadcast(
 
   return {
     broadcastId: broadcast.id,
+    whatsappConfigId: config.id,
     templateName,
     templateLanguage,
     provider: config.provider === 'uazapi' ? 'uazapi' : 'meta',
@@ -251,6 +276,11 @@ export async function createBroadcast(
     planned,
     rejected,
   };
+}
+
+function getRandomJitter(minMs = 8000, maxMs = 20000): number {
+  if (process.env.NODE_ENV === 'test') return 0;
+  return Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
 }
 
 /**
@@ -273,7 +303,8 @@ export async function deliverBroadcast(
   let sentCount = 0;
   const isUazapi = plan.provider === 'uazapi' && Boolean(plan.apiUrl);
 
-  for (const recipient of plan.planned) {
+  for (let i = 0; i < plan.planned.length; i++) {
+    const recipient = plan.planned[i];
     const variants = phoneVariants(recipient.phone);
     let sentMessageId: string | null = null;
     let lastError: string | null = null;
@@ -329,6 +360,31 @@ export async function deliverBroadcast(
           error_message: lastError || 'Unknown error',
         })
         .eq('id', recipient.recipientRowId);
+    }
+
+    // Anti-ban human pacing: intervalo aleatório de 8 a 20 segundos entre envios na Uazapi
+    if (isUazapi && i < plan.planned.length - 1) {
+      const delayMs = getRandomJitter(8000, 20000);
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
+  // Incrementa a contagem de mensagens enviadas hoje no motor de aquecimento
+  if (
+    sentCount > 0 &&
+    plan.whatsappConfigId &&
+    plan.whatsappConfigId !== 'global' &&
+    typeof db.rpc === 'function'
+  ) {
+    try {
+      await db.rpc('increment_whatsapp_daily_sent', {
+        config_id: plan.whatsappConfigId,
+        count_to_add: sentCount,
+      });
+    } catch (err) {
+      console.error('Failed to increment daily warmup sent:', err);
     }
   }
 

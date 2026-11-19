@@ -219,4 +219,30 @@ describe('POST /api/whatsapp/broadcast — role permissions and dispatch', () =>
     expect(json.error).toMatch(/missing a valid phone number/i)
     expect(sendTemplateMessageMock).not.toHaveBeenCalled()
   })
+
+  it('rejects dispatch if daily warmup limit would be exceeded', async () => {
+    configRow = {
+      id: 'cfg-1',
+      account_id: 'acct-1',
+      phone_number_id: 'PNID-1',
+      access_token: 'enc-token',
+      warmup_enabled: true,
+      daily_message_limit: 30,
+      messages_sent_today: 28,
+    }
+
+    // Attempting to send 5 recipients when remaining quota is only 2 (30 - 28)
+    const fiveRecipients = Array.from({ length: 5 }, (_, i) => ({
+      phone: `+551199999000${i}`,
+      params: ['Test'],
+    }))
+
+    const res = await postBroadcast({ recipients: fiveRecipients })
+    const json = await res.json()
+
+    expect(res.status).toBe(400)
+    expect(json.code).toBe('warmup_limit_exceeded')
+    expect(json.error).toMatch(/Limite de aquecimento excedido/i)
+    expect(sendTemplateMessageMock).not.toHaveBeenCalled()
+  })
 })

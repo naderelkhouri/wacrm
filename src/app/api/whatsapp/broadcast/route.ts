@@ -190,6 +190,33 @@ export async function POST(request: Request) {
 
     const accessToken = decrypt(config.access_token)
 
+    // Trava de segurança anti-ban: verifica cota diária do motor de aquecimento
+    if (config.id && config.id !== 'global') {
+      const { data: configRow } = await supabase
+        .from('whatsapp_config')
+        .select('warmup_enabled, daily_message_limit, messages_sent_today')
+        .eq('id', config.id)
+        .maybeSingle()
+
+      if (configRow?.warmup_enabled) {
+        const remainingQuota = Math.max(
+          0,
+          (configRow.daily_message_limit || 30) - (configRow.messages_sent_today || 0)
+        )
+        if (recipients.length > remainingQuota) {
+          return NextResponse.json(
+            {
+              error: `Limite de aquecimento excedido: este envio tem ${recipients.length} destinatários, mas a instância só pode enviar mais ${remainingQuota} mensagens hoje para evitar banimentos (limite diário: ${configRow.daily_message_limit}).`,
+              code: 'warmup_limit_exceeded',
+              remaining_quota: remainingQuota,
+              daily_limit: configRow.daily_message_limit,
+            },
+            { status: 400 }
+          )
+        }
+      }
+    }
+
     // Load the template row once so sendTemplateMessage can build
     // header + button components on each iteration. Loading inside
     // the loop would N+1 against Supabase for every recipient.
@@ -218,7 +245,8 @@ export async function POST(request: Request) {
     let failedCount = 0
     const isUazapi = config.provider === 'uazapi' && Boolean(config.api_url)
 
-    for (const recipient of recipients) {
+    for (let i = 0; i < recipients.length; i++) {
+      const recipient = recipients[i]
       const sanitized = sanitizePhoneForMeta(recipient.phone)
 
       if (!isValidE164(sanitized)) {
@@ -294,9 +322,15 @@ export async function POST(request: Request) {
         })
         failedCount++
       }
+
+      // Anti-ban human pacing: intervalo aleatório de 8 a 20 segundos entre envios na Uazapi
+      if (isUazapi && i < recipients.length - 1 && process.env.NODE_ENV !== 'test') {
+        const jitterMs = Math.floor(Math.random() * (20000 - 8000 + 1)) + 8000
+        await new Promise((resolve) => setTimeout(resolve, jitterMs))
+      }
     }
 
-    if (sentCount > 0 && config.id && config.id !== 'global') {
+    if (sentCount > 0 && config.id && config.id !== 'global' && typeof supabase.rpc === 'function') {
       try {
         await supabase.rpc('increment_whatsapp_daily_sent', {
           config_id: config.id,
