@@ -34,13 +34,16 @@ describe("buildMediaPath", () => {
 });
 
 describe("MEDIA_MAX_BYTES_BY_KIND", () => {
-  it("caps images at Meta's tighter 5 MB limit", () => {
-    expect(MEDIA_MAX_BYTES_BY_KIND.image).toBe(5 * 1024 * 1024);
+  it("caps images at 16 MB for chat attachments", () => {
+    expect(MEDIA_MAX_BYTES_BY_KIND.image).toBe(16 * 1024 * 1024);
   });
 
-  it("caps video/audio/document at the 16 MB bucket limit", () => {
+  it("caps video/audio at 16 MB", () => {
     expect(MEDIA_MAX_BYTES_BY_KIND.video).toBe(16 * 1024 * 1024);
     expect(MEDIA_MAX_BYTES_BY_KIND.audio).toBe(16 * 1024 * 1024);
-    expect(MEDIA_MAX_BYTES_BY_KIND.document).toBe(16 * 1024 * 1024);
+  });
+
+  it("caps documents at WhatsApp native 100 MB limit", () => {
+    expect(MEDIA_MAX_BYTES_BY_KIND.document).toBe(100 * 1024 * 1024);
   });
 });

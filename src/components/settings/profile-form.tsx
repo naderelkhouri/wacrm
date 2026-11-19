@@ -17,8 +17,9 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { useTranslations } from 'next-intl';
 import { SettingsPanelHead } from './settings-panel-head';
+import { AVATAR_MAX_BYTES } from '@/lib/storage/upload-media';
 
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+const MAX_AVATAR_BYTES = AVATAR_MAX_BYTES;
 const ALLOWED_MIME = new Set([
   'image/png',
   'image/jpeg',

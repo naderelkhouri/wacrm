@@ -14,24 +14,25 @@ import { createClient } from "@/lib/supabase/client";
  * composer call this so the logic lives in exactly one place.
  */
 
-/** 16 MB — matches the `file_size_limit` on both buckets (migrations 016/020/023). */
-export const MEDIA_MAX_BYTES = 16 * 1024 * 1024;
+/** 100 MB — matches the maximum `file_size_limit` (documents) on chat-media and flow-media buckets. */
+export const MEDIA_MAX_BYTES = 100 * 1024 * 1024;
 
 /**
- * Per-kind upload ceilings that mirror Meta's WhatsApp Cloud API caps so
- * a file that the bucket would accept (≤16 MB) but Meta would reject is
- * caught client-side BEFORE upload — otherwise it lands in storage as an
- * orphan and the send fails with a confusing 400. Images are Meta's
- * tightest cap at 5 MB; documents are held at the 16 MB bucket limit
- * (Meta allows 100 MB, but the bucket — and shared-hosting upload UX —
- * caps lower).
+ * Per-kind upload ceilings:
+ * - image: 16 MB (WhatsApp Web / Uazapi ceiling; Meta template headers enforce 5 MB specifically)
+ * - video: 16 MB (WhatsApp standard video cap)
+ * - audio: 16 MB (WhatsApp voice notes / PTT standard cap)
+ * - document: 100 MB (WhatsApp official & Uazapi document cap — PDFs, proposals, spreadsheets, zip)
  */
 export const MEDIA_MAX_BYTES_BY_KIND = {
-  image: 5 * 1024 * 1024,
+  image: 16 * 1024 * 1024,
   video: 16 * 1024 * 1024,
   audio: 16 * 1024 * 1024,
-  document: 16 * 1024 * 1024,
+  document: 100 * 1024 * 1024,
 } as const;
+
+/** Avatar max size: 5 MB across profile and contact avatars */
+export const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
 
 /**
  * Build the account-scoped object path for an upload. Pure + exported so

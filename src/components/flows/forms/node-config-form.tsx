@@ -46,7 +46,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { uploadAccountMedia, MEDIA_MAX_BYTES } from "@/lib/storage/upload-media";
+import {
+  uploadAccountMedia,
+  MEDIA_MAX_BYTES,
+  MEDIA_MAX_BYTES_BY_KIND,
+} from "@/lib/storage/upload-media";
 import { slugify, type BuilderNode } from "../shared";
 import { NextNodeRow, NodeKeySelect, TextRow } from "./fields";
 
@@ -882,7 +886,7 @@ const MEDIA_ACCEPT: Record<NonNullable<SendMediaCfg["media_type"]>, string> = {
   image: "image/png,image/jpeg,image/webp",
   video: "video/mp4,video/3gpp",
   document:
-    "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain",
+    "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv,application/zip,application/x-zip-compressed",
 };
 
 const FLOW_MEDIA_BUCKET = "flow-media";
@@ -911,9 +915,12 @@ function SendMediaForm({
 
   const handleFile = useCallback(
     async (file: File) => {
-      if (file.size > MEDIA_MAX_BYTES) {
+      const maxBytes = MEDIA_MAX_BYTES_BY_KIND[mediaType] ?? MEDIA_MAX_BYTES;
+      if (file.size > maxBytes) {
         toast.error(
-          `File is ${(file.size / 1024 / 1024).toFixed(1)} MB — limit is 16 MB.`,
+          `File is ${(file.size / 1024 / 1024).toFixed(1)} MB — ${mediaType} limit is ${Math.round(
+            maxBytes / 1024 / 1024,
+          )} MB.`,
         );
         return;
       }

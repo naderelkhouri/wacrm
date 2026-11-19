@@ -1561,7 +1561,7 @@
       "unsupportedImage": "Tipo de imagem não suportado",
       "unsupportedImageDesc": "Use PNG, JPG, WebP ou GIF.",
       "imageTooLarge": "A imagem é muito grande",
-      "imageTooLargeDesc": "Tamanho máximo: 2 MB.",
+      "imageTooLargeDesc": "Tamanho máximo: 5 MB.",
       "nameRequired": "O nome de exibição é obrigatório",
       "invalidEmail": "Insira um endereço de email válido",
       "uploadFailed": "Falha no envio da imagem: {message}",

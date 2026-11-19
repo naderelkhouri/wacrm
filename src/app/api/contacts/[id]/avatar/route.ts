@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/flows/admin-client';
 import { ensureAccountForUser } from '@/lib/auth/ensure-account';
+import { AVATAR_MAX_BYTES } from '@/lib/storage/upload-media';
 
-const MAX_AVATAR_BYTES = 3 * 1024 * 1024; // 3MB
+const MAX_AVATAR_BYTES = AVATAR_MAX_BYTES; // 5MB
 const ALLOWED_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 
 export async function POST(
@@ -82,7 +83,7 @@ export async function POST(
 
       if (file.size > MAX_AVATAR_BYTES) {
         return NextResponse.json(
-          { error: 'Tamanho excede o limite de 3MB.' },
+          { error: 'Tamanho excede o limite de 5MB.' },
           { status: 400 }
         );
       }

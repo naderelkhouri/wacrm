@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/flows/admin-client'
+import { AVATAR_MAX_BYTES } from '@/lib/storage/upload-media'
 
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024 // 2MB
+const MAX_AVATAR_BYTES = AVATAR_MAX_BYTES // 5MB
 const ALLOWED_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 
 /**
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
 
     if (file.size > MAX_AVATAR_BYTES) {
       return NextResponse.json(
-        { error: 'File size exceeds 2MB limit.' },
+        { error: 'File size exceeds 5MB limit.' },
         { status: 400 }
       )
     }
