@@ -19,6 +19,7 @@ import { DealsSettings } from '@/components/settings/deals-settings';
 import { MembersTab } from '@/components/settings/members-tab';
 import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
 import { BillingPanel } from '@/components/settings/billing-panel';
+import { StoragePanel } from '@/components/settings/storage-panel';
 import {
   resolveSection,
   type SettingsSection,
@@ -98,6 +99,7 @@ function SettingsPageInner() {
     appearance: <AppearancePanel />,
     billing: <BillingPanel />,
     whatsapp: <WhatsAppConfig />,
+    storage: <StoragePanel />,
     templates: <TemplateManager />,
     'quick-replies': <QuickRepliesManager />,
     fields: <FieldsAndTagsPanel />,
