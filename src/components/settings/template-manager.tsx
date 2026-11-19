@@ -487,21 +487,10 @@ export function TemplateManager() {
         title={t('title')}
         description={t('description')}
         action={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={handleSyncFromMeta}
-              disabled={syncing}
-              title={t('syncTitle')}
-            >
-              <RefreshCw className={`size-4 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? t('syncing') : t('syncFromMeta')}
-            </Button>
-            <Button onClick={openCreate}>
-              <Plus className="size-4" />
-              {t('newTemplate')}
-            </Button>
-          </div>
+          <Button onClick={openCreate}>
+            <Plus className="size-4" />
+            {t('newTemplate')}
+          </Button>
         }
       />
 
@@ -1072,9 +1061,9 @@ export function TemplateManager() {
                   {editingId ? t('saving') : t('submitting')}
                 </>
               ) : editingId ? (
-                t('saveResubmit')
+                'Salvar Alterações'
               ) : (
-                t('submitApproval')
+                'Salvar Modelo'
               )}
             </Button>
           </DialogFooter>

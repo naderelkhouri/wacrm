@@ -207,8 +207,8 @@ export function MessageComposer({
   // every capability — so the disabled branch is a no-op there.
   const canSend = useCan("send-messages");
   const readOnly = !canSend;
-  // Media (like free-form text) is only allowed inside the 24h window.
-  const inputsDisabled = readOnly || sessionExpired;
+  // No Uazapi não há restrição de janela de 24h
+  const inputsDisabled = readOnly;
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -247,7 +247,7 @@ export function MessageComposer({
 
   const handleSend = useCallback(async () => {
     const trimmed = text.trim();
-    if (!trimmed || sending || sessionExpired) return;
+    if (!trimmed || sending) return;
 
     const currentVars = buildMessageVariables({ contact, conversation });
     const missing = getUndefinedVariablesInMessage(trimmed, currentVars);
@@ -617,23 +617,6 @@ export function MessageComposer({
           />
         </div>
       )}
-      {sessionExpired && (
-        <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-500/10 px-3 py-2">
-          <p className="text-xs text-amber-400">
-            {t("sessionExpiredHint")}
-          </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs text-amber-400 hover:text-amber-300"
-            onClick={onOpenTemplates}
-          >
-            <LayoutTemplate className="mr-1 h-3 w-3" />
-            {t("templates")}
-          </Button>
-        </div>
-      )}
-
       {/* Hidden file inputs driven by the attach menu. */}
       <input
         ref={imageInputRef}
@@ -871,11 +854,9 @@ export function MessageComposer({
             placeholder={
               readOnly
                 ? t("readOnlyPlaceholder")
-                : sessionExpired
-                  ? t("sessionExpiredPlaceholder")
-                  : t("typeMessagePlaceholder")
+                : t("typeMessagePlaceholder")
             }
-            disabled={sessionExpired || readOnly}
+            disabled={readOnly}
             rows={1}
             // Textarea keeps its own inline title — the GatedButton
             // wrapping pattern doesn't apply to non-button inputs.
@@ -883,7 +864,7 @@ export function MessageComposer({
             title={readOnly ? t("readOnlyTitle") : undefined}
             className={cn(
               "flex-1 resize-none rounded-xl border border-border bg-muted px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-primary/50",
-              (sessionExpired || readOnly) && "cursor-not-allowed opacity-50"
+              readOnly && "cursor-not-allowed opacity-50"
             )}
           />
 
@@ -891,7 +872,7 @@ export function MessageComposer({
             size="sm"
             canAct={!readOnly}
             gateReason="send messages"
-            disabled={!text.trim() || sessionExpired || sending}
+            disabled={!text.trim() || sending}
             onClick={handleSend}
             className="h-9 w-9 shrink-0 bg-primary p-0 hover:bg-primary/90 disabled:opacity-40"
           >

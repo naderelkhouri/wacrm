@@ -149,28 +149,34 @@ export async function POST(request: Request) {
       metaTemplateId = `dry-run-${crypto.randomUUID()}`
       metaStatus = 'PENDING'
     } else {
-      const { data: config, error: configError } = await supabase
+      const { data: config } = await supabase
         .from('whatsapp_config')
         .select('*')
         .eq('account_id', accountId)
-        .single()
-      if (configError || !config) {
-        return NextResponse.json(
-          {
-            error:
-              'WhatsApp not configured. Connect your WhatsApp Business account in Settings first.',
-          },
-          { status: 400 },
-        )
-      }
-      if (!config.waba_id) {
-        return NextResponse.json(
-          {
-            error:
-              'WABA (WhatsApp Business Account) ID missing. Re-connect your account in Settings.',
-          },
-          { status: 400 },
-        )
+        .order('is_default', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      // No Uazapi ou sem WABA da Meta, o template é salvo e ativado diretamente como APPROVED
+      if (!config || config.provider === 'uazapi' || !config.waba_id) {
+        const row = buildUpsertRow(accountId, user.id, payload, {
+          status: 'APPROVED',
+          metaTemplateId: null,
+          submissionError: null,
+        })
+        const upsertRes = await upsertTemplateRow(supabase, row)
+        if (upsertRes.error) {
+          return NextResponse.json(
+            { error: upsertRes.error.message },
+            { status: 500 },
+          )
+        }
+        return NextResponse.json({
+          success: true,
+          status: 'APPROVED',
+          template: upsertRes.data,
+          dry_run: false,
+        })
       }
 
       const accessToken = decrypt(config.access_token)

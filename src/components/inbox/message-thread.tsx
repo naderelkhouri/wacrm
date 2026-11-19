@@ -191,7 +191,8 @@ export function MessageThread({
   whatsappProvider,
   onInstanceChange,
 }: MessageThreadProps) {
-  const isUazapi = whatsappProvider === "uazapi";
+  // No ramo brazil-uazapi, o provedor é sempre Uazapi (sem restrições de janela 24h da Meta)
+  const isUazapi = true;
   const t = useTranslations("Inbox.messageThread");
   const tTimer = useTranslations("Inbox.sessionTimer");
   const tQuote = useTranslations("Inbox.replyQuote");
@@ -309,35 +310,10 @@ export function MessageThread({
     };
   }, []);
 
-  // 24-hour session timer (Meta Cloud API only; Uazapi has no 24h window restriction)
+  // No Uazapi, não há restrição de janela de 24 horas da Meta
   const sessionInfo = useMemo(() => {
-    if (isUazapi) {
-      return { expired: false, remaining: "Uazapi • Janela livre", isUazapi: true };
-    }
-    if (!messages.length) return { expired: false, remaining: "" };
-
-    // Find last customer message
-    const lastCustomerMsg = [...messages]
-      .reverse()
-      .find((m) => m.sender_type === "customer");
-
-    if (!lastCustomerMsg) return { expired: true, remaining: "No customer messages" };
-
-    const hoursSince = differenceInHours(new Date(), new Date(lastCustomerMsg.created_at));
-    const expired = hoursSince >= 24;
-
-    if (expired) {
-      return { expired: true, remaining: tTimer("expired") };
-    }
-
-    const hoursLeft = 24 - hoursSince;
-    const remaining =
-      hoursLeft >= 1
-        ? tTimer("xhRemaining", { hours: Math.floor(hoursLeft) })
-        : tTimer("xmRemaining", { minutes: Math.floor(hoursLeft * 60) });
-
-    return { expired, remaining, isUazapi: false };
-  }, [messages, tTimer, isUazapi]);
+    return { expired: false, remaining: "Uazapi • Janela livre", isUazapi: true };
+  }, []);
 
   // Store latest callback in a ref so fetchMessages doesn't need to
   // depend on `onMessagesLoaded` — otherwise parent re-renders cause

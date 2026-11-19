@@ -100,13 +100,35 @@ export async function PATCH(
     }
 
     if (!existing.meta_template_id) {
-      return NextResponse.json(
-        {
-          error:
-            'This template was never submitted to Meta — use New Template to submit it instead.',
-        },
-        { status: 400 },
-      )
+      // Templates do Uazapi são salvos e editados localmente sem intermediação da Meta
+      const { error: updateErr } = await supabase
+        .from('message_templates')
+        .update({
+          category: payload.category,
+          language: payload.language,
+          header_type: payload.header_type ?? null,
+          header_content: payload.header_content ?? null,
+          header_media_url: payload.header_media_url ?? null,
+          body_text: payload.body_text,
+          footer_text: payload.footer_text ?? null,
+          buttons: payload.buttons ?? null,
+          sample_values: payload.sample_values ?? null,
+          status: 'APPROVED',
+          last_submitted_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .eq('account_id', accountId)
+
+      if (updateErr) {
+        return NextResponse.json({ error: updateErr.message }, { status: 500 })
+      }
+
+      return NextResponse.json({
+        success: true,
+        status: 'APPROVED',
+        template_id: id,
+        dry_run: false,
+      })
     }
 
     if (!EDITABLE_STATUSES.has(existing.status)) {
