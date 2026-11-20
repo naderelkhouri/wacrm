@@ -112,7 +112,7 @@ export function BillingPanel() {
             setData(updated);
             setPixResult(null);
             setCheckoutModalOpen(false);
-            toast.success('🎉 Pagamento confirmado via PagBank! Sua assinatura está ativa.');
+            toast.success('🎉 Pagamento confirmado via Pix! Sua assinatura está ativa.');
           }
         }
       } catch {
@@ -145,7 +145,7 @@ export function BillingPanel() {
 
       const json = await res.json();
       if (!res.ok) {
-        throw new Error(json.error || 'Falha ao gerar cobrança no PagBank');
+        throw new Error(json.error || 'Falha ao gerar cobrança Pix');
       }
 
       setPixResult(json);
@@ -209,7 +209,7 @@ export function BillingPanel() {
                 Faturamento & Assinatura
               </CardTitle>
               <CardDescription>
-                Gerencie o plano da sua empresa, limites de equipe e pagamentos via PagBank (PagSeguro).
+                Gerencie o plano da sua empresa, limites de equipe e pagamentos via Pix (BunkerPay).
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -378,7 +378,7 @@ export function BillingPanel() {
                 {submittingCheckout ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Gerando Pix no PagBank...
+                    Gerando Pix...
                   </>
                 ) : (
                   'Gerar QR Code Pix'
@@ -392,7 +392,7 @@ export function BillingPanel() {
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={pixResult.pix.qr_code_image_url}
-                    alt="QR Code Pix PagBank"
+                    alt="QR Code Pix"
                     className="w-48 h-48"
                   />
                 </div>
@@ -406,7 +406,7 @@ export function BillingPanel() {
               <div className="space-y-1">
                 <p className="text-xs font-medium text-foreground flex items-center justify-center gap-1">
                   <Clock className="h-3.5 w-3.5 text-amber-500" />
-                  Aguardando confirmação do PagBank em tempo real...
+                  Aguardando confirmação do Pix em tempo real...
                 </p>
                 <p className="text-[11px] text-muted-foreground">
                   Abra o aplicativo do seu banco e pague escaneando o QR Code ou cole a chave abaixo.

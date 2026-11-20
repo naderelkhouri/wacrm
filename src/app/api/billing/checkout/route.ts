@@ -1,12 +1,13 @@
 // ============================================================
 // POST /api/billing/checkout
 //
-// Creates a PagBank (PagSeguro) Pix order for a subscription plan.
-// Restricted to account owners.
+// Creates a Pix order for a subscription plan via BunkerPay (default)
+// or PagBank / Stripe. Restricted to account owners.
 // ============================================================
 
 import { NextResponse } from 'next/server';
 import { getCurrentAccount, toErrorResponse, ForbiddenError } from '@/lib/auth/account';
+import { bunkerPayClient, BunkerPayApiError } from '@/lib/payments/bunkerpay/client';
 import { pagseguroClient, PagSeguroApiError } from '@/lib/payments/pagseguro/client';
 import { createStripeCheckoutSession } from '@/lib/payments/stripe/client';
 
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
 
     const body = (await request.json().catch(() => null)) as {
       planId?: string;
-      gateway?: 'pagseguro' | 'stripe';
+      gateway?: 'bunkerpay' | 'pagseguro' | 'stripe';
       currency?: 'BRL' | 'USD' | 'EUR';
       customerTaxId?: string;
       customerPhone?: string;
@@ -76,46 +77,79 @@ export async function POST(request: Request) {
       });
     }
 
-    // PagBank sandbox rejects orders where buyer email is identical to the merchant account email
-    const merchantEmail = process.env.PAGSEGURO_MERCHANT_EMAIL || 'progredindosempre@gmail.com';
-    if (process.env.PAGSEGURO_ENV === 'sandbox' && customerEmail.toLowerCase() === merchantEmail.toLowerCase()) {
-      customerEmail = customerEmail.replace('@', '+comprador@');
+    // Route to PagSeguro if explicitly requested
+    if (body.gateway === 'pagseguro') {
+      const merchantEmail = process.env.PAGSEGURO_MERCHANT_EMAIL || 'progredindosempre@gmail.com';
+      if (process.env.PAGSEGURO_ENV === 'sandbox' && customerEmail.toLowerCase() === merchantEmail.toLowerCase()) {
+        customerEmail = customerEmail.replace('@', '+comprador@');
+      }
+
+      const order = await pagseguroClient.createPixOrder({
+        accountId,
+        planId: plan.id,
+        planName: plan.name,
+        amountCents: plan.price_cents,
+        customer: {
+          name: customerName,
+          email: customerEmail,
+          taxId: body.customerTaxId,
+          phone: body.customerPhone,
+        },
+        expirationMinutes: 120, // 2 hours
+      });
+
+      const qrCode = order.qr_codes?.[0];
+      const qrCodeImage = qrCode?.links?.find((l) => l.media?.includes('image') || l.rel === 'QRCODE.PNG')?.href;
+
+      return NextResponse.json({
+        success: true,
+        gateway: 'pagseguro',
+        order_id: order.id,
+        reference_id: order.reference_id,
+        plan: {
+          id: plan.id,
+          name: plan.name,
+          price_cents: plan.price_cents,
+        },
+        pix: {
+          qr_code_text: qrCode?.text || '',
+          qr_code_image_url: qrCodeImage || '',
+          expiration_date: qrCode?.expiration_date,
+        },
+      });
     }
 
-    // 3. Create Pix Order via PagBank
-    const order = await pagseguroClient.createPixOrder({
-      accountId,
-      planId: plan.id,
-      planName: plan.name,
-      amountCents: plan.price_cents,
-      customer: {
-        name: customerName,
-        email: customerEmail,
-        taxId: body.customerTaxId,
-        phone: body.customerPhone,
-      },
-      expirationMinutes: 120, // 2 hours
+    // Default: BunkerPay Pix Gateway (bunkerpay.io)
+    const referenceId = `sub_${accountId}_${plan.id}_${Date.now()}`;
+    const amountBrl = plan.price_cents / 100;
+
+    const payment = await bunkerPayClient.createPayment({
+      amount: amountBrl,
+      email: customerEmail,
+      observation: referenceId,
     });
 
-    const qrCode = order.qr_codes?.[0];
-    const qrCodeImage = qrCode?.links?.find((l) => l.media?.includes('image') || l.rel === 'QRCODE.PNG')?.href;
+    const qrCodeImage = payment.qrCodeBase64 || payment.qrCodeUrl || '';
 
     return NextResponse.json({
       success: true,
-      order_id: order.id,
-      reference_id: order.reference_id,
+      gateway: 'bunkerpay',
+      order_id: payment.id,
+      reference_id: referenceId,
       plan: {
         id: plan.id,
         name: plan.name,
         price_cents: plan.price_cents,
       },
       pix: {
-        qr_code_text: qrCode?.text || '',
-        qr_code_image_url: qrCodeImage || '',
-        expiration_date: qrCode?.expiration_date,
+        qr_code_text: payment.qrCopyPaste || '',
+        qr_code_image_url: qrCodeImage,
       },
     });
   } catch (err: unknown) {
+    if (err instanceof BunkerPayApiError) {
+      return NextResponse.json({ error: err.message, details: err.details }, { status: err.status });
+    }
     if (err instanceof PagSeguroApiError) {
       return NextResponse.json({ error: err.message, details: err.details }, { status: err.status });
     }
